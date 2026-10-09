@@ -50,37 +50,38 @@ the extension ID — and therefore the OAuth redirect — is identical on every 
 
 ## Environment configuration
 
-Two gitignored env files, with committed `*.example` templates:
+Two gitignored env files, with committed `*.example` templates. Copy each template, fill
+in the values, and you're done — `make gen-secrets` prints the three random ones.
 
-**`backend/.env`** (copy from `backend/.env.example`)
+**`backend/.env`** — everything the API and worker need:
 
-| Variable | What it is |
+| Variable | Why it exists |
 | --- | --- |
-| `GOOGLE_CLOUD_PROJECT` | GCP project ID (`demo-tab-recorder` works for local emulators) |
-| `FIRESTORE_EMULATOR_HOST` | `localhost:8080` locally; **unset in production** |
-| `GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` | from the OAuth client (below) |
-| `ASSEMBLYAI_API_KEY` | from the AssemblyAI dashboard (below) |
-| `SESSION_JWT_SECRET` / `WEBHOOK_SECRET` | `openssl rand -hex 32` each |
-| `TOKEN_FERNET_KEY` | `uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `GOOGLE_CLOUD_PROJECT` | Which GCP project owns Firestore/Tasks/GCS. Any string works against the local emulators (`demo-tab-recorder`). |
+| `FIRESTORE_EMULATOR_HOST` | Points the backend at the local emulator instead of real Firestore. Set to `localhost:8080` for local dev, **never set in production**. |
+| `GOOGLE_OAUTH_CLIENT_ID` | Identifies our app to Google during sign-in and token refresh. |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Proves to Google that the code-for-token exchange comes from *our* backend, not someone who stole a client ID. Backend-only, never ships in the extension. |
+| `ASSEMBLYAI_API_KEY` | Authenticates transcription submissions. From your AssemblyAI dashboard. |
+| `SESSION_JWT_SECRET` | Signs the session tokens the backend issues after Google sign-in; every extension→backend request is verified against it. Rotating it signs everyone out. |
+| `WEBHOOK_SECRET` | Shared header value AssemblyAI echoes back on its "transcription done" callback — the webhook endpoint is public, this is how we know the call is really from them. |
+| `TOKEN_FERNET_KEY` | Encrypts stored Google refresh tokens at rest in Firestore. Losing/rotating it makes stored tokens unreadable and forces re-sign-in. |
 
-**`extension/.env`** (copy from `extension/.env.example`, rebuild after changes)
+**`extension/.env`** — baked in at build time, so rebuild after changing:
 
-| Variable | What it is |
+| Variable | Why it exists |
 | --- | --- |
-| `WXT_GOOGLE_CLIENT_ID` | same OAuth client ID (client IDs are public by design) |
-| `WXT_API_BASE_URL` | `http://localhost:8000` locally, or the deployed api URL |
+| `WXT_GOOGLE_CLIENT_ID` | The same OAuth client ID — the extension needs it to open Google's sign-in window. Client IDs are public by design; the secret stays in the backend. |
+| `WXT_API_BASE_URL` | Where the extension finds the backend: `http://localhost:8000` locally, the Cloud Run URL in production. |
 
-## API keys
+## Google OAuth client
 
-**AssemblyAI** — sign up at assemblyai.com, copy the API key from the dashboard into
-`ASSEMBLYAI_API_KEY`. The free tier covers testing; transcription is billed per audio-hour.
-
-**Google OAuth client** — in console.cloud.google.com (one project for everything):
+In console.cloud.google.com (one project for everything):
 1. Enable APIs: *Google Drive API*, *Google Docs API*, *Gmail API*.
 2. OAuth consent screen: **External**, publishing status **Testing**, and add every account
    that will sign in under **Test users** (testing mode hard-blocks everyone else).
 3. Credentials → OAuth client ID → type **Web application** → Authorized redirect URI:
    `https://nfphhdblmoifbnbieoodhchadpcgnfjd.chromiumapp.org/`
+   (derived from the pinned extension ID, so it's the same for every install).
 4. Scopes used: `openid email`, `drive.file` (only files this app creates), `gmail.send`.
 
 > Testing-mode refresh tokens expire after **7 days** — sign in again before a demo.

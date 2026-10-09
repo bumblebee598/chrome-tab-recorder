@@ -29,3 +29,9 @@ lint:
 # Generate synthetic test media (requires ffmpeg)
 fixtures:
 	./scripts/make_fixture_media.sh
+
+# Random values for backend/.env — paste the output in
+gen-secrets:
+	@echo "SESSION_JWT_SECRET=$$(openssl rand -hex 32)"
+	@echo "WEBHOOK_SECRET=$$(openssl rand -hex 32)"
+	@echo "TOKEN_FERNET_KEY=$$(openssl rand -base64 32 | tr '+/' '-_')"
