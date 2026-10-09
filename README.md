@@ -55,23 +55,23 @@ in the values, and you're done — `make gen-secrets` prints the three random on
 
 **`backend/.env`** — everything the API and worker need:
 
-| Variable | Why it exists |
+| Variable | Purpose |
 | --- | --- |
-| `GOOGLE_CLOUD_PROJECT` | Which GCP project owns Firestore/Tasks/GCS. Any string works against the local emulators (`demo-tab-recorder`). |
-| `FIRESTORE_EMULATOR_HOST` | Points the backend at the local emulator instead of real Firestore. Set to `localhost:8080` for local dev, **never set in production**. |
-| `GOOGLE_OAUTH_CLIENT_ID` | Identifies our app to Google during sign-in and token refresh. |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | Proves to Google that the code-for-token exchange comes from *our* backend, not someone who stole a client ID. Backend-only, never ships in the extension. |
-| `ASSEMBLYAI_API_KEY` | Authenticates transcription submissions. From your AssemblyAI dashboard. |
-| `SESSION_JWT_SECRET` | Signs the session tokens the backend issues after Google sign-in; every extension→backend request is verified against it. Rotating it signs everyone out. |
-| `WEBHOOK_SECRET` | Shared header value AssemblyAI echoes back on its "transcription done" callback — the webhook endpoint is public, this is how we know the call is really from them. |
-| `TOKEN_FERNET_KEY` | Encrypts stored Google refresh tokens at rest in Firestore. Losing/rotating it makes stored tokens unreadable and forces re-sign-in. |
+| `GOOGLE_CLOUD_PROJECT` | GCP project ID. Any string works against the emulators. |
+| `FIRESTORE_EMULATOR_HOST` | `localhost:8080` for local dev; never set in production. |
+| `GOOGLE_OAUTH_CLIENT_ID` | OAuth client ID. |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | OAuth client secret. Backend-only. |
+| `ASSEMBLYAI_API_KEY` | AssemblyAI dashboard → API key. |
+| `SESSION_JWT_SECRET` | Signs backend-issued session tokens. |
+| `WEBHOOK_SECRET` | Authenticates AssemblyAI webhook callbacks. |
+| `TOKEN_FERNET_KEY` | Encrypts stored refresh tokens. Rotating forces re-sign-in. |
 
 **`extension/.env`** — baked in at build time, so rebuild after changing:
 
-| Variable | Why it exists |
+| Variable | Purpose |
 | --- | --- |
-| `WXT_GOOGLE_CLIENT_ID` | The same OAuth client ID — the extension needs it to open Google's sign-in window. Client IDs are public by design; the secret stays in the backend. |
-| `WXT_API_BASE_URL` | Where the extension finds the backend: `http://localhost:8000` locally, the Cloud Run URL in production. |
+| `WXT_GOOGLE_CLIENT_ID` | Same OAuth client ID (public). |
+| `WXT_API_BASE_URL` | Backend URL: `http://localhost:8000` or the Cloud Run URL. |
 
 ## Google OAuth client
 
