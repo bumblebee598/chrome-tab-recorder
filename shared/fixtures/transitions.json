@@ -1,0 +1,481 @@
+{
+  "$comment": "Table-driven fixtures for the pure transition(job, event) function, shared by backend/tests/test_transitions.py and extension/src/lib/state/transition.test.ts. Harness contract: job = {...defaults, ...before} (shallow top-level merge); expected = {...job, ...after}; assert transition(job, event) deep-equals expected. Nested objects (stages, lastError) are always replaced whole, never deep-merged. Backoff: nextRetryAt = occurredAt + min(30 * 2^(attempts-1), 1800) seconds, where attempts is the post-increment value. Auto-retry stops when attempts reaches 10: that STAGE_FAILED marks the job failed (lastError keeps retryable=true, manual RETRY still allowed). Jitter is applied by the queue runner at scheduling time, never inside transition, so this table stays deterministic.",
+  "defaults": {
+    "jobId": "0f1e2d3c-0000-4000-8000-000000000001",
+    "name": "Weekly sync recording",
+    "createdAt": "2026-10-05T10:00:00Z",
+    "mode": "video",
+    "sources": { "tab": true, "mic": true },
+    "localStatus": "pending_upload",
+    "remoteStatus": null,
+    "uploadedBytes": 0,
+    "totalBytes": 1048576,
+    "segmentCount": 0,
+    "recovered": false,
+    "driveSessionUri": null,
+    "driveFileId": null,
+    "driveFolderId": null,
+    "docId": null,
+    "transcriptId": null,
+    "attempts": 0,
+    "nextRetryAt": null,
+    "lastError": null,
+    "stages": {
+      "upload": null,
+      "extractAudio": null,
+      "transcribe": null,
+      "generateDoc": null,
+      "email": null
+    }
+  },
+  "cases": [
+    {
+      "name": "recording_finished_moves_to_pending_upload",
+      "before": { "localStatus": "recording", "totalBytes": null, "segmentCount": 24 },
+      "event": { "type": "RECORDING_FINISHED", "occurredAt": "2026-10-05T10:00:40Z", "totalBytes": 7340032 },
+      "after": { "localStatus": "pending_upload", "totalBytes": 7340032 }
+    },
+    {
+      "name": "recording_finished_recovered_marks_flag",
+      "before": { "localStatus": "recording", "totalBytes": null, "segmentCount": 10 },
+      "event": { "type": "RECORDING_FINISHED", "occurredAt": "2026-10-05T10:02:00Z", "totalBytes": 2621440, "recovered": true },
+      "after": { "localStatus": "pending_upload", "totalBytes": 2621440, "recovered": true }
+    },
+    {
+      "name": "recording_failed_without_data",
+      "before": { "localStatus": "recording", "totalBytes": null },
+      "event": { "type": "RECORDING_FAILED", "occurredAt": "2026-10-05T10:00:10Z", "code": "NO_DATA", "message": "capture produced no segments" },
+      "after": {
+        "localStatus": "failed",
+        "lastError": { "code": "NO_DATA", "message": "capture produced no segments", "retryable": false }
+      }
+    },
+    {
+      "name": "recording_ignores_pipeline_events",
+      "before": { "localStatus": "recording", "totalBytes": null, "segmentCount": 3 },
+      "event": { "type": "UPLOAD_STARTED", "occurredAt": "2026-10-05T10:00:20Z" },
+      "after": {}
+    },
+    {
+      "name": "recording_finished_requires_recording_state",
+      "before": {},
+      "event": { "type": "RECORDING_FINISHED", "occurredAt": "2026-10-05T10:00:40Z", "totalBytes": 1 },
+      "after": {}
+    },
+    {
+      "name": "upload_started_from_pending_upload",
+      "before": {},
+      "event": { "type": "UPLOAD_STARTED", "occurredAt": "2026-10-05T10:01:00Z" },
+      "after": { "localStatus": "uploading" }
+    },
+    {
+      "name": "upload_started_is_ignored_after_upload_finished",
+      "before": {
+        "localStatus": "uploaded",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": null, "transcribe": null, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "UPLOAD_STARTED", "occurredAt": "2026-10-05T10:06:00Z" },
+      "after": {}
+    },
+    {
+      "name": "upload_progress_advances_bytes",
+      "before": { "localStatus": "uploading", "uploadedBytes": 131072 },
+      "event": { "type": "UPLOAD_PROGRESS", "occurredAt": "2026-10-05T10:02:00Z", "uploadedBytes": 524288 },
+      "after": { "uploadedBytes": 524288 }
+    },
+    {
+      "name": "upload_progress_never_regresses_bytes",
+      "before": { "localStatus": "uploading", "uploadedBytes": 786432 },
+      "event": { "type": "UPLOAD_PROGRESS", "occurredAt": "2026-10-05T10:02:30Z", "uploadedBytes": 524288 },
+      "after": {}
+    },
+    {
+      "name": "upload_progress_ignored_outside_uploading",
+      "before": {},
+      "event": { "type": "UPLOAD_PROGRESS", "occurredAt": "2026-10-05T10:02:00Z", "uploadedBytes": 1024 },
+      "after": {}
+    },
+    {
+      "name": "upload_completed_sets_stage_and_clears_retry_state",
+      "before": {
+        "localStatus": "uploading",
+        "uploadedBytes": 917504,
+        "driveSessionUri": "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=abc",
+        "attempts": 2,
+        "lastError": { "code": "NETWORK", "message": "socket closed", "retryable": true },
+        "nextRetryAt": "2026-10-05T10:04:30Z"
+      },
+      "event": { "type": "UPLOAD_COMPLETED", "occurredAt": "2026-10-05T10:05:00Z", "driveFileId": "drive-file-1" },
+      "after": {
+        "localStatus": "uploaded",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "attempts": 0,
+        "lastError": null,
+        "nextRetryAt": null,
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": null, "transcribe": null, "generateDoc": null, "email": null }
+      }
+    },
+    {
+      "name": "upload_completed_replay_is_noop",
+      "before": {
+        "localStatus": "uploaded",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": null, "transcribe": null, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "UPLOAD_COMPLETED", "occurredAt": "2026-10-05T10:05:10Z", "driveFileId": "drive-file-2" },
+      "after": {}
+    },
+    {
+      "name": "job_enqueued_moves_to_queued",
+      "before": {
+        "localStatus": "uploaded",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": null, "transcribe": null, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "JOB_ENQUEUED", "occurredAt": "2026-10-05T10:05:20Z" },
+      "after": { "localStatus": "queued_for_transcription", "remoteStatus": "queued" }
+    },
+    {
+      "name": "job_enqueued_requires_completed_upload_stage",
+      "before": { "localStatus": "uploaded" },
+      "event": { "type": "JOB_ENQUEUED", "occurredAt": "2026-10-05T10:05:20Z" },
+      "after": {}
+    },
+    {
+      "name": "extract_started_marks_backend_active",
+      "before": {
+        "localStatus": "queued_for_transcription",
+        "remoteStatus": "queued",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "attempts": 1,
+        "lastError": { "code": "TASK_RETRY", "message": "first dispatch failed", "retryable": true },
+        "nextRetryAt": "2026-10-05T10:06:00Z",
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": null, "transcribe": null, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "EXTRACT_STARTED", "occurredAt": "2026-10-05T10:06:30Z" },
+      "after": { "localStatus": "transcribing", "remoteStatus": "extracting_audio", "attempts": 0, "lastError": null, "nextRetryAt": null }
+    },
+    {
+      "name": "extract_started_late_is_noop",
+      "before": {
+        "localStatus": "transcribing",
+        "remoteStatus": "transcribing",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "transcriptId": "tr-1",
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": { "completedAt": "2026-10-05T10:08:00Z" }, "transcribe": null, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "EXTRACT_STARTED", "occurredAt": "2026-10-05T10:09:00Z" },
+      "after": {}
+    },
+    {
+      "name": "extract_completed_records_stage",
+      "before": {
+        "localStatus": "transcribing",
+        "remoteStatus": "extracting_audio",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": null, "transcribe": null, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "EXTRACT_COMPLETED", "occurredAt": "2026-10-05T10:08:00Z" },
+      "after": {
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": { "completedAt": "2026-10-05T10:08:00Z" }, "transcribe": null, "generateDoc": null, "email": null }
+      }
+    },
+    {
+      "name": "transcript_submitted_moves_to_transcribing",
+      "before": {
+        "localStatus": "transcribing",
+        "remoteStatus": "extracting_audio",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": { "completedAt": "2026-10-05T10:08:00Z" }, "transcribe": null, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "TRANSCRIPT_SUBMITTED", "occurredAt": "2026-10-05T10:08:30Z", "transcriptId": "tr-1" },
+      "after": { "remoteStatus": "transcribing", "transcriptId": "tr-1" }
+    },
+    {
+      "name": "transcript_completed_moves_to_generating_doc",
+      "before": {
+        "localStatus": "transcribing",
+        "remoteStatus": "transcribing",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "transcriptId": "tr-1",
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": { "completedAt": "2026-10-05T10:08:00Z" }, "transcribe": null, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "TRANSCRIPT_COMPLETED", "occurredAt": "2026-10-05T10:30:00Z" },
+      "after": {
+        "remoteStatus": "generating_doc",
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": { "completedAt": "2026-10-05T10:08:00Z" }, "transcribe": { "completedAt": "2026-10-05T10:30:00Z" }, "generateDoc": null, "email": null }
+      }
+    },
+    {
+      "name": "late_webhook_never_regresses_completed_job",
+      "before": {
+        "localStatus": "completed",
+        "remoteStatus": "completed",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "transcriptId": "tr-1",
+        "docId": "doc-1",
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": { "completedAt": "2026-10-05T10:08:00Z" }, "transcribe": { "completedAt": "2026-10-05T10:30:00Z" }, "generateDoc": { "completedAt": "2026-10-05T10:31:00Z" }, "email": { "completedAt": "2026-10-05T10:32:00Z" } }
+      },
+      "event": { "type": "TRANSCRIPT_COMPLETED", "occurredAt": "2026-10-05T10:45:00Z" },
+      "after": {}
+    },
+    {
+      "name": "doc_created_moves_to_emailing",
+      "before": {
+        "localStatus": "transcribing",
+        "remoteStatus": "generating_doc",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "transcriptId": "tr-1",
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": { "completedAt": "2026-10-05T10:08:00Z" }, "transcribe": { "completedAt": "2026-10-05T10:30:00Z" }, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "DOC_CREATED", "occurredAt": "2026-10-05T10:31:00Z", "docId": "doc-1" },
+      "after": {
+        "remoteStatus": "emailing",
+        "docId": "doc-1",
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": { "completedAt": "2026-10-05T10:08:00Z" }, "transcribe": { "completedAt": "2026-10-05T10:30:00Z" }, "generateDoc": { "completedAt": "2026-10-05T10:31:00Z" }, "email": null }
+      }
+    },
+    {
+      "name": "email_sent_completes_job",
+      "before": {
+        "localStatus": "transcribing",
+        "remoteStatus": "emailing",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "transcriptId": "tr-1",
+        "docId": "doc-1",
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": { "completedAt": "2026-10-05T10:08:00Z" }, "transcribe": { "completedAt": "2026-10-05T10:30:00Z" }, "generateDoc": { "completedAt": "2026-10-05T10:31:00Z" }, "email": null }
+      },
+      "event": { "type": "EMAIL_SENT", "occurredAt": "2026-10-05T10:32:00Z" },
+      "after": {
+        "localStatus": "completed",
+        "remoteStatus": "completed",
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": { "completedAt": "2026-10-05T10:08:00Z" }, "transcribe": { "completedAt": "2026-10-05T10:30:00Z" }, "generateDoc": { "completedAt": "2026-10-05T10:31:00Z" }, "email": { "completedAt": "2026-10-05T10:32:00Z" } }
+      }
+    },
+    {
+      "name": "stage_failed_retryable_first_attempt_backs_off_30s",
+      "before": { "localStatus": "uploading", "uploadedBytes": 262144 },
+      "event": { "type": "STAGE_FAILED", "occurredAt": "2026-10-05T10:02:00Z", "code": "NETWORK", "message": "socket closed", "retryable": true },
+      "after": {
+        "attempts": 1,
+        "lastError": { "code": "NETWORK", "message": "socket closed", "retryable": true },
+        "nextRetryAt": "2026-10-05T10:02:30Z"
+      }
+    },
+    {
+      "name": "stage_failed_retryable_backoff_doubles",
+      "before": {
+        "localStatus": "transcribing",
+        "remoteStatus": "extracting_audio",
+        "attempts": 2,
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": null, "transcribe": null, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "STAGE_FAILED", "occurredAt": "2026-10-05T11:00:00Z", "code": "FFMPEG_CRASH", "message": "exit 137", "retryable": true },
+      "after": {
+        "attempts": 3,
+        "lastError": { "code": "FFMPEG_CRASH", "message": "exit 137", "retryable": true },
+        "nextRetryAt": "2026-10-05T11:02:00Z"
+      }
+    },
+    {
+      "name": "stage_failed_backoff_caps_at_30_minutes",
+      "before": { "localStatus": "uploading", "uploadedBytes": 262144, "attempts": 6 },
+      "event": { "type": "STAGE_FAILED", "occurredAt": "2026-10-05T12:00:00Z", "code": "NETWORK", "message": "still down", "retryable": true },
+      "after": {
+        "attempts": 7,
+        "lastError": { "code": "NETWORK", "message": "still down", "retryable": true },
+        "nextRetryAt": "2026-10-05T12:30:00Z"
+      }
+    },
+    {
+      "name": "stage_failed_tenth_attempt_stops_auto_retry",
+      "before": {
+        "localStatus": "uploading",
+        "uploadedBytes": 262144,
+        "attempts": 9,
+        "nextRetryAt": "2026-10-05T11:55:00Z",
+        "lastError": { "code": "NETWORK", "message": "flaky", "retryable": true }
+      },
+      "event": { "type": "STAGE_FAILED", "occurredAt": "2026-10-05T12:00:00Z", "code": "NETWORK", "message": "gave up", "retryable": true },
+      "after": {
+        "localStatus": "failed",
+        "attempts": 10,
+        "nextRetryAt": null,
+        "lastError": { "code": "NETWORK", "message": "gave up", "retryable": true }
+      }
+    },
+    {
+      "name": "stage_failed_tenth_attempt_marks_backend_failed",
+      "before": {
+        "localStatus": "transcribing",
+        "remoteStatus": "extracting_audio",
+        "attempts": 9,
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": null, "transcribe": null, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "STAGE_FAILED", "occurredAt": "2026-10-05T12:00:00Z", "code": "FFMPEG_CRASH", "message": "exit 137", "retryable": true },
+      "after": {
+        "localStatus": "failed",
+        "remoteStatus": "failed",
+        "attempts": 10,
+        "nextRetryAt": null,
+        "lastError": { "code": "FFMPEG_CRASH", "message": "exit 137", "retryable": true }
+      }
+    },
+    {
+      "name": "manual_retry_allowed_after_auto_retry_exhausted",
+      "before": {
+        "localStatus": "failed",
+        "attempts": 10,
+        "lastError": { "code": "NETWORK", "message": "gave up", "retryable": true },
+        "driveSessionUri": "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=abc",
+        "uploadedBytes": 262144
+      },
+      "event": { "type": "RETRY", "occurredAt": "2026-10-05T12:40:00Z" },
+      "after": { "localStatus": "uploading", "attempts": 0, "lastError": null, "nextRetryAt": null }
+    },
+    {
+      "name": "stage_failed_fatal_before_backend_leaves_remote_null",
+      "before": { "localStatus": "uploading", "uploadedBytes": 262144 },
+      "event": { "type": "STAGE_FAILED", "occurredAt": "2026-10-05T10:03:00Z", "code": "QUOTA_EXCEEDED", "message": "Drive storage full", "retryable": false },
+      "after": {
+        "localStatus": "failed",
+        "lastError": { "code": "QUOTA_EXCEEDED", "message": "Drive storage full", "retryable": false }
+      }
+    },
+    {
+      "name": "stage_failed_fatal_marks_backend_failed",
+      "before": {
+        "localStatus": "transcribing",
+        "remoteStatus": "transcribing",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "transcriptId": "tr-1",
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": { "completedAt": "2026-10-05T10:08:00Z" }, "transcribe": null, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "STAGE_FAILED", "occurredAt": "2026-10-05T10:40:00Z", "code": "TRANSCRIPT_ERROR", "message": "AssemblyAI returned error", "retryable": false },
+      "after": {
+        "localStatus": "failed",
+        "remoteStatus": "failed",
+        "lastError": { "code": "TRANSCRIPT_ERROR", "message": "AssemblyAI returned error", "retryable": false }
+      }
+    },
+    {
+      "name": "stage_failed_on_completed_job_is_noop",
+      "before": {
+        "localStatus": "completed",
+        "remoteStatus": "completed",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "transcriptId": "tr-1",
+        "docId": "doc-1",
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": { "completedAt": "2026-10-05T10:08:00Z" }, "transcribe": { "completedAt": "2026-10-05T10:30:00Z" }, "generateDoc": { "completedAt": "2026-10-05T10:31:00Z" }, "email": { "completedAt": "2026-10-05T10:32:00Z" } }
+      },
+      "event": { "type": "STAGE_FAILED", "occurredAt": "2026-10-05T11:00:00Z", "code": "LATE", "message": "late failure", "retryable": false },
+      "after": {}
+    },
+    {
+      "name": "auth_required_pauses_job",
+      "before": {
+        "localStatus": "uploading",
+        "uploadedBytes": 524288,
+        "driveSessionUri": "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=abc"
+      },
+      "event": { "type": "AUTH_REQUIRED", "occurredAt": "2026-10-05T10:03:00Z" },
+      "after": { "localStatus": "needs_sign_in" }
+    },
+    {
+      "name": "signed_in_resumes_upload_with_session",
+      "before": {
+        "localStatus": "needs_sign_in",
+        "uploadedBytes": 524288,
+        "driveSessionUri": "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=abc",
+        "attempts": 1,
+        "lastError": { "code": "AUTH_EXPIRED", "message": "token revoked", "retryable": true },
+        "nextRetryAt": "2026-10-05T10:04:00Z"
+      },
+      "event": { "type": "SIGNED_IN", "occurredAt": "2026-10-05T10:10:00Z" },
+      "after": { "localStatus": "uploading", "attempts": 0, "lastError": null, "nextRetryAt": null }
+    },
+    {
+      "name": "signed_in_without_session_restarts_pending",
+      "before": { "localStatus": "needs_sign_in" },
+      "event": { "type": "SIGNED_IN", "occurredAt": "2026-10-05T10:10:00Z" },
+      "after": { "localStatus": "pending_upload" }
+    },
+    {
+      "name": "signed_in_rejoins_backend_progress",
+      "before": {
+        "localStatus": "needs_sign_in",
+        "remoteStatus": "generating_doc",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "transcriptId": "tr-1",
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": { "completedAt": "2026-10-05T10:08:00Z" }, "transcribe": { "completedAt": "2026-10-05T10:30:00Z" }, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "SIGNED_IN", "occurredAt": "2026-10-05T10:31:30Z" },
+      "after": { "localStatus": "transcribing" }
+    },
+    {
+      "name": "backend_events_wait_while_signed_out",
+      "before": {
+        "localStatus": "needs_sign_in",
+        "remoteStatus": "extracting_audio",
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": null, "transcribe": null, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "EXTRACT_COMPLETED", "occurredAt": "2026-10-05T10:08:00Z" },
+      "after": {}
+    },
+    {
+      "name": "retry_after_backend_failure_resumes_next_stage",
+      "before": {
+        "localStatus": "failed",
+        "remoteStatus": "failed",
+        "attempts": 3,
+        "lastError": { "code": "FFMPEG_CRASH", "message": "exit 137", "retryable": false },
+        "driveFileId": "drive-file-1",
+        "uploadedBytes": 1048576,
+        "stages": { "upload": { "completedAt": "2026-10-05T10:05:00Z" }, "extractAudio": { "completedAt": "2026-10-05T10:08:00Z" }, "transcribe": null, "generateDoc": null, "email": null }
+      },
+      "event": { "type": "RETRY", "occurredAt": "2026-10-05T11:00:00Z" },
+      "after": { "localStatus": "transcribing", "remoteStatus": "transcribing", "attempts": 0, "lastError": null, "nextRetryAt": null }
+    },
+    {
+      "name": "retry_after_upload_failure_resumes_upload",
+      "before": {
+        "localStatus": "failed",
+        "attempts": 5,
+        "lastError": { "code": "NETWORK", "message": "gave up", "retryable": true },
+        "nextRetryAt": "2026-10-05T10:30:00Z",
+        "driveSessionUri": "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=abc",
+        "uploadedBytes": 262144
+      },
+      "event": { "type": "RETRY", "occurredAt": "2026-10-05T10:35:00Z" },
+      "after": { "localStatus": "uploading", "attempts": 0, "lastError": null, "nextRetryAt": null }
+    },
+    {
+      "name": "retry_ignored_unless_failed",
+      "before": { "localStatus": "uploading", "uploadedBytes": 100 },
+      "event": { "type": "RETRY", "occurredAt": "2026-10-05T10:02:00Z" },
+      "after": {}
+    }
+  ]
+}

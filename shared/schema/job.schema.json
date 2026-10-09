@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tab-recorder.dev/schema/job.schema.json",
+  "title": "Job",
+  "description": "A recording job, created in the extension with a client-generated UUID and shared verbatim with the backend. All timestamps are ISO-8601 UTC strings with a Z suffix.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "jobId",
+    "name",
+    "createdAt",
+    "mode",
+    "sources",
+    "localStatus",
+    "remoteStatus",
+    "uploadedBytes",
+    "totalBytes",
+    "segmentCount",
+    "recovered",
+    "driveSessionUri",
+    "driveFileId",
+    "driveFolderId",
+    "docId",
+    "transcriptId",
+    "attempts",
+    "nextRetryAt",
+    "lastError",
+    "stages"
+  ],
+  "properties": {
+    "jobId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string"
+    },
+    "mode": {
+      "enum": ["video", "audio"]
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tab", "mic"],
+      "properties": {
+        "tab": { "type": "boolean" },
+        "mic": { "type": "boolean" }
+      }
+    },
+    "localStatus": {
+      "description": "Extension-facing UI state. needs_sign_in is a paused substate; failed exits only via RETRY.",
+      "enum": [
+        "recording",
+        "pending_upload",
+        "uploading",
+        "uploaded",
+        "queued_for_transcription",
+        "transcribing",
+        "completed",
+        "failed",
+        "needs_sign_in"
+      ]
+    },
+    "remoteStatus": {
+      "description": "Backend pipeline substate; null until the backend has accepted the job.",
+      "enum": [
+        "queued",
+        "extracting_audio",
+        "transcribing",
+        "generating_doc",
+        "emailing",
+        "completed",
+        "failed",
+        null
+      ]
+    },
+    "uploadedBytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "totalBytes": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "segmentCount": {
+      "description": "OPFS segments written so far (seg-NNNNNN.webm files under /recordings/{jobId}/).",
+      "type": "integer",
+      "minimum": 0
+    },
+    "recovered": {
+      "description": "True when the recording was interrupted (crash/restart) and salvaged by the recovery routine.",
+      "type": "boolean"
+    },
+    "driveSessionUri": { "type": ["string", "null"] },
+    "driveFileId": { "type": ["string", "null"] },
+    "driveFolderId": { "type": ["string", "null"] },
+    "docId": { "type": ["string", "null"] },
+    "transcriptId": { "type": ["string", "null"] },
+    "attempts": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "nextRetryAt": { "type": ["string", "null"] },
+    "lastError": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message", "retryable"],
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "type": "string" },
+            "retryable": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "stages": {
+      "description": "Completion markers per pipeline stage. Retries key off these, never off the display status.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["upload", "extractAudio", "transcribe", "generateDoc", "email"],
+      "properties": {
+        "upload": { "$ref": "#/$defs/stageDone" },
+        "extractAudio": { "$ref": "#/$defs/stageDone" },
+        "transcribe": { "$ref": "#/$defs/stageDone" },
+        "generateDoc": { "$ref": "#/$defs/stageDone" },
+        "email": { "$ref": "#/$defs/stageDone" }
+      }
+    }
+  },
+  "$defs": {
+    "stageDone": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["completedAt"],
+          "properties": {
+            "completedAt": { "type": "string" }
+          }
+        }
+      ]
+    }
+  }
+}

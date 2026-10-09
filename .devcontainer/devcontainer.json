@@ -1,0 +1,28 @@
+{
+  "name": "tab-recorder",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" },
+    "ghcr.io/devcontainers/features/java:1": { "version": "21" },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/dhoeric/features/google-cloud-cli:1": {}
+  },
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y ffmpeg && curl -LsSf https://astral.sh/uv/install.sh | sh && cd backend && $HOME/.local/bin/uv sync && cd ../extension && npm install",
+  "forwardPorts": [8000, 8080, 8081, 8123],
+  "portsAttributes": {
+    "8000": { "label": "api" },
+    "8080": { "label": "firestore-emulator" },
+    "8081": { "label": "worker" },
+    "8123": { "label": "cloud-tasks-emulator" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  }
+}

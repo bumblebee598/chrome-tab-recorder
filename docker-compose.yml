@@ -1,0 +1,61 @@
+services:
+  firestore:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: >
+      gcloud emulators firestore start
+      --host-port=0.0.0.0:8080
+      --project=demo-tab-recorder
+    ports:
+      - "8080:8080"
+
+  tasks:
+    image: ghcr.io/aertje/cloud-tasks-emulator:latest
+    command:
+      - "-host"
+      - "0.0.0.0"
+      - "-port"
+      - "8123"
+      - "-initial-queue"
+      - "projects/demo-tab-recorder/locations/local/queues/extract"
+      - "-initial-queue"
+      - "projects/demo-tab-recorder/locations/local/queues/transcribe-submit"
+      - "-initial-queue"
+      - "projects/demo-tab-recorder/locations/local/queues/finalize"
+    ports:
+      - "8123:8123"
+
+  api:
+    build: ./backend
+    command: uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - ./backend/.env
+    environment:
+      GOOGLE_CLOUD_PROJECT: demo-tab-recorder
+      FIRESTORE_EMULATOR_HOST: firestore:8080
+      CLOUD_TASKS_EMULATOR_HOST: tasks:8123
+      TASKS_LOCATION: local
+    volumes:
+      - ./backend/app:/srv/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - firestore
+      - tasks
+
+  worker:
+    build: ./backend
+    command: uvicorn app.worker.main:app --host 0.0.0.0 --port 8080 --reload
+    env_file:
+      - ./backend/.env
+    environment:
+      GOOGLE_CLOUD_PROJECT: demo-tab-recorder
+      FIRESTORE_EMULATOR_HOST: firestore:8080
+      CLOUD_TASKS_EMULATOR_HOST: tasks:8123
+      TASKS_LOCATION: local
+    volumes:
+      - ./backend/app:/srv/app
+    ports:
+      - "8081:8080"
+    depends_on:
+      - firestore
+      - tasks

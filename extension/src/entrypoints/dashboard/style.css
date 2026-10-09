@@ -1,0 +1,200 @@
+:root {
+  color-scheme: light;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+  /* cream theme — one consistent look in light and dark system modes */
+  --bg: #f7f2e8;
+  --card: #fffdf7;
+  --text: #2e2820;
+  --text-dim: rgba(46, 40, 32, 0.62);
+  --border: rgba(120, 100, 70, 0.18);
+  --accent: #d6402c;
+  --accent-soft: rgba(214, 64, 44, 0.12);
+  --control: rgba(120, 100, 70, 0.1);
+  --green: #2e7d3a;
+  --amber: #9a6b0f;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+main {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.brand-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+h1 {
+  font-size: 20px;
+  margin: 0;
+  flex: 1;
+}
+
+.backend-state {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.signin-btn {
+  border: none;
+  border-radius: 7px;
+  background: #1a73e8;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.empty {
+  color: var(--text-dim);
+}
+
+.storage-meter {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0 0 14px;
+}
+
+.import-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  vertical-align: top;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+.name {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.tag {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--control);
+  color: var(--text-dim);
+}
+
+.chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: var(--control);
+  color: var(--text-dim);
+}
+
+.chip-recording,
+.chip-failed {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.chip-pending_upload,
+.chip-uploading {
+  background: rgba(176, 96, 0, 0.12);
+  color: var(--amber);
+}
+
+.chip-completed {
+  background: rgba(24, 128, 56, 0.12);
+  color: var(--green);
+}
+
+.retry-line {
+  font-size: 11px;
+  color: var(--amber);
+  margin-top: 4px;
+}
+
+.error-line {
+  font-size: 11px;
+  color: var(--accent);
+  margin-top: 4px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.links a {
+  margin-right: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.actions button {
+  display: block;
+  border: 1px solid var(--border);
+  background: var(--control);
+  color: var(--text);
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+.actions button.danger {
+  color: var(--accent);
+}

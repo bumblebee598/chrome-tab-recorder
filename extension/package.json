@@ -1,0 +1,28 @@
+{
+  "name": "tab-recorder-extension",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "compile": "tsc --noEmit",
+    "test": "vitest run",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "dexie": "^4.0.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@wxt-dev/module-react": "^1.1.3",
+    "fake-indexeddb": "^6.0.0",
+    "typescript": "^5.6.2",
+    "vitest": "^5.0.3",
+    "wxt": "^0.20.0"
+  }
+}

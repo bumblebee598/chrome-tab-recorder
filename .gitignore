@@ -1,0 +1,23 @@
+# Node / extension
+node_modules/
+extension/.output/
+extension/.wxt/
+extension/stats.html
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Env & secrets
+.env
+*.pem
+!**/fixtures/**/*.pem
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
