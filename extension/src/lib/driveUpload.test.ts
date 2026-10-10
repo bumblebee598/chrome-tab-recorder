@@ -184,6 +184,29 @@ it('retries the same chunk once with a refreshed token after a 401', async () =>
   });
 });
 
+it('chunk size is a multiple of 256 KiB (Drive requirement)', async () => {
+  const { CHUNK_BYTES } = await import('./driveUpload');
+  expect(CHUNK_BYTES % (256 * 1024)).toBe(0);
+});
+
+it('a 5xx on a chunk schedules a retry instead of failing the job', async () => {
+  const job = pendingJob({ driveFolderId: 'folder-1' });
+  await db.jobs.put(job);
+  queueResponses(
+    json(200, { files: [] }), // dedup check
+    new Response(null, { status: 200, headers: { Location: 'https://upload.session/5' } }),
+    new Response('backend exploded', { status: 503 }),
+  );
+
+  const outcome = await uploadJob(job, { auth: token, renew });
+
+  expect(outcome).toBe('retry_scheduled');
+  const stored = (await db.jobs.get(job.jobId))!;
+  expect(stored.localStatus).toBe('uploading'); // keeps stage, not failed
+  expect(stored.attempts).toBe(1);
+  expect(stored.nextRetryAt).not.toBeNull();
+});
+
 it('a second 401 after refreshing pauses the job', async () => {
   const job = pendingJob({
     localStatus: 'uploading',

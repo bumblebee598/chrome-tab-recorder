@@ -202,6 +202,39 @@ def test_webhook_completed_enqueues_finalize_once(ctx):
     assert len(finalize_tasks) == 1
 
 
+def test_webhook_for_superseded_transcript_is_ignored(ctx):
+    """A late webhook from an old generation must not touch the job."""
+    http, store, queue, _ = ctx
+    store.docs["job-1"] = {
+        "jobId": "job-1",
+        "userSub": "user-1",
+        "remoteStatus": "transcribing",
+        "transcriptId": "tr-2",  # retry already produced a newer transcript
+        "generation": 1,
+    }
+    response = http.post(
+        "/webhooks/assemblyai?job=job-1",
+        json={"transcript_id": "tr-1", "status": "completed"},
+        headers={"X-Tabrec-Webhook-Secret": "hook-secret"},
+    )
+    assert response.status_code == 200
+    assert [t for t in queue.tasks if t["path"] == "/tasks/finalize"] == []
+
+
+def test_advance_cas_has_exactly_one_winner():
+    """Two competing stage completions: one CAS wins, the other is a no-op."""
+    import asyncio
+
+    from tests.fakes import InMemoryJobStore
+
+    store = InMemoryJobStore()
+    asyncio.run(store.create({"jobId": "j", "remoteStatus": "transcribing"}))
+    first = asyncio.run(store.advance("j", ["transcribing"], "generating_doc", {}))
+    second = asyncio.run(store.advance("j", ["transcribing"], "generating_doc", {}))
+    assert first is True
+    assert second is False
+
+
 def test_webhook_error_marks_job_failed(ctx):
     http, store, queue, _ = ctx
     store.docs["job-1"] = {

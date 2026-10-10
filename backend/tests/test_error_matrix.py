@@ -109,6 +109,21 @@ async def ok_metadata(token, file_id):
     return {"id": file_id, "parents": ["folder-1"]}
 
 
+def test_extract_with_revoked_google_access_fails_cleanly(ctx):
+    """No user record -> token mint fails -> USER_AUTH, no crash loop."""
+    http, store = ctx
+    store.docs["job-1"] = transcribing_job(
+        remoteStatus="queued", transcriptId=None, audioGcsUri=None
+    )
+
+    response = http.post("/tasks/extract", json={"jobId": "job-1"})
+
+    assert response.status_code == 200  # 200 = stop retrying, the job is marked
+    job = store.docs["job-1"]
+    assert job["remoteStatus"] == "failed"
+    assert job["error"]["code"] == "USER_AUTH"
+
+
 def test_fault_injection_fails_then_recovers(ctx):
     http, store = ctx
     worker_app.dependency_overrides[get_settings] = lambda: Settings(

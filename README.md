@@ -31,7 +31,17 @@ docs/             HOW_IT_WORKS, STATE_MACHINE, ERRORS (failure matrix), VALIDATI
 .devcontainer/    Codespaces: Python 3.12, Node 20, Java 21, gcloud, ffmpeg, docker-in-docker
 ```
 
-## Quickstart (Codespaces or local)
+## Quickstart — try it in two minutes (no build)
+
+The backend is deployed; [`dist/chrome-mv3.zip`](dist/chrome-mv3.zip) is prebuilt against it.
+
+1. Download and unzip `dist/chrome-mv3.zip`.
+2. `chrome://extensions` → Developer mode → **Load unpacked** → select the unzipped folder.
+3. Popup → **Sign in with Google** (your email must be on the OAuth test-user list).
+4. Record any tab for ~30 seconds, stop, and watch: Uploading → Transcribing → Completed,
+   ending with a Doc in your Drive and an email with both links.
+
+## Building from source (Codespaces or local)
 
 Open in GitHub Codespaces (everything is preinstalled by the devcontainer) or locally with
 Docker, Node 20+, [uv](https://docs.astral.sh/uv/), and ffmpeg. Then:
@@ -43,10 +53,9 @@ make build-ext  # → extension/.output/chrome-mv3
 ```
 
 **Chrome extensions cannot run inside Codespaces.** Build there, download
-`extension/.output/chrome-mv3`, and load it unpacked on your machine via
-`chrome://extensions` → Developer mode → Load unpacked. The manifest pins a public key, so
-the extension ID — and therefore the OAuth redirect — is identical on every machine:
-`nfphhdblmoifbnbieoodhchadpcgnfjd`.
+`extension/.output/chrome-mv3`, and load it unpacked on your machine. The manifest pins a
+public key, so the extension ID — and therefore the OAuth redirect — is identical on every
+machine: `nfphhdblmoifbnbieoodhchadpcgnfjd`.
 
 ## Environment configuration
 
