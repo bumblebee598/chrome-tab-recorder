@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { applyEvent, createRecordingJob, nowIso } from '@/lib/jobs';
 import { runQueue } from '@/lib/queue';
 import { recoverInterruptedJobs } from '@/lib/recovery';
+import { pollRemoteStatuses } from '@/lib/sync';
 import {
   DEFAULT_PREFS,
   REC_STATE_KEY,
@@ -81,6 +82,7 @@ async function heartbeat(): Promise<void> {
   const activeJobId = (await getRecState())?.jobId ?? null;
   await recoverInterruptedJobs(activeJobId);
   await runQueue();
+  await pollRemoteStatuses().catch(() => {});
   await sweepVerifiedUploads().catch(() => {});
 }
 

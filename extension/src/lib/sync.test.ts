@@ -61,6 +61,23 @@ it('is idempotent and keeps moving forward', async () => {
   expect(done.stages.email).not.toBeNull();
 });
 
+it('pollRemoteStatuses pulls progress for pollable jobs and skips when idle', async () => {
+  const { pollRemoteStatuses } = await import('./sync');
+  const { vi } = await import('vitest');
+
+  const fetchMock = vi.fn(async () => [
+    { jobId: 'job-sync-1', remoteStatus: 'completed' as const, docId: 'doc-9' },
+  ]);
+  await pollRemoteStatuses(fetchMock);
+  expect(fetchMock).toHaveBeenCalledWith(['job-sync-1']);
+  expect((await db.jobs.get('job-sync-1'))?.localStatus).toBe('completed');
+
+  // now terminal: no more fetches
+  const idleMock = vi.fn(async () => []);
+  await pollRemoteStatuses(idleMock);
+  expect(idleMock).not.toHaveBeenCalled();
+});
+
 it('maps a backend failure to a non-retryable local failure', async () => {
   await syncFromRemote({
     jobId: 'job-sync-1',

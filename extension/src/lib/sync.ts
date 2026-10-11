@@ -2,9 +2,23 @@
 // ladder up to that status. Every event is guarded and monotonic, so replaying
 // the whole ladder on each poll is safe — already-applied steps are no-ops.
 
+import { fetchStatuses, type RemoteJobStatus } from './api';
+import { db } from './db';
 import { applyEvent, nowIso } from './jobs';
-import type { RemoteJobStatus } from './api';
-import type { RemoteStatus } from './state/types';
+import type { LocalStatus, RemoteStatus } from './state/types';
+
+const POLLABLE: LocalStatus[] = ['uploaded', 'queued_for_transcription', 'transcribing'];
+
+/** Pull backend progress onto local jobs. Safe to call from anywhere, any time. */
+export async function pollRemoteStatuses(
+  fetch: typeof fetchStatuses = fetchStatuses,
+  apply: (status: RemoteJobStatus) => Promise<void> = syncFromRemote,
+): Promise<void> {
+  const jobs = await db.jobs.where('localStatus').anyOf(POLLABLE).toArray();
+  if (jobs.length === 0) return;
+  const statuses = await fetch(jobs.map((job) => job.jobId)).catch(() => []);
+  for (const status of statuses) await apply(status);
+}
 
 const REMOTE_RANK: Record<Exclude<RemoteStatus, 'failed'>, number> = {
   queued: 0,

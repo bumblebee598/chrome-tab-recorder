@@ -11,6 +11,7 @@ import {
   type RecordingPrefs,
 } from '@/lib/messages';
 import { checkQuota, formatBytes, type QuotaCheck } from '@/lib/quota';
+import { pollRemoteStatuses } from '@/lib/sync';
 import { chipLabel, driveLink, formatWhen, humanError, retryLine } from '@/lib/status';
 import { formatElapsed } from '@/lib/time';
 import type { Job, LocalStatus } from '@/lib/state/types';
@@ -101,10 +102,15 @@ export default function App() {
     };
     window.addEventListener('online', onOnline);
 
+    // Pull backend progress while the popup is open (heartbeat covers the rest)
+    void pollRemoteStatuses().then(refreshJobs);
+    const remotePoll = setInterval(() => void pollRemoteStatuses(), 10_000);
+
     const poll = setInterval(refreshJobs, 2000);
     return () => {
       browser.storage.onChanged.removeListener(onSessionChange);
       window.removeEventListener('online', onOnline);
+      clearInterval(remotePoll);
       clearInterval(poll);
     };
   }, []);
