@@ -10,10 +10,11 @@ it enters the real pipeline via the dashboard's **Import file (debug)** action
 | --- | --- | --- | --- | --- |
 | 2h stereo audio extraction (`RUN_LOAD_TESTS=1 uv run pytest tests/load -s`) | 153 MB webm (opus 128k, 7200s) | ffmpeg pipeline (`extract_audio_to_ogg`, 16 MiB chunks) | **43 s**, output 68.6 MB ogg¹, RSS: python 79 MB / ffmpeg 16 MB | 2026-10-09, M-series MacBook |
 | Synthetic generation speed | `gen_synthetic.sh 7200 audio` | — | 62 s | same |
-| 2h synthetic video → Drive upload | `gen_synthetic.sh 7200 video` (~2.3 GB) | extension queue → Drive resumable | _run via dashboard import; record time + that exactly one Drive file exists_ | _pending_ |
-| Real recording ≥30 min, full pipeline | real tab+mic recording | record → email | _record duration of each stage chip + Doc/email arrival_ | _pending (user)_ |
-| Network-drop resume | any upload in flight | Wi-Fi off 60s mid-upload | _resumes from saved offset; one Drive file_ | _pending_ |
-| Service-worker kill mid-upload | chrome://serviceworker-internals → Stop | upload | _resumes within 1 min heartbeat; one Drive file_ | _pending_ |
+| 1h synthetic video → Drive upload (2h scaled: disk allowed 1.2 GB × 2 copies) | `gen_synthetic.sh 3600 video` (1.2 GB) | dashboard import → OPFS → Drive resumable | uploaded completely; **exactly one Drive file**; local copy auto-deleted after size verification (which doubles as the integrity check) | 2026-10-12, residential uplink |
+| Network-drop resume | 1.2 GB upload in flight | Wi-Fi off 60 s at **6% (67 MB)** | status showed "Connection lost · attempt 1"; resumed **from 6%**, not zero; single Drive file | 2026-10-12 |
+| Real recording 60 min, full pipeline | real tab+mic recording (~780 MB ≈ **13 MB/min**) | record → Drive → transcript → Doc → email | full pipeline completed unattended; email + Doc delivered | 2026-10-12 |
+| Service-worker kill mid-upload | OS-level `kill` of the extension process | upload | covered by automated resume tests (`driveUpload.test.ts` probe/offset cases); two live kill attempts were outrun by the upload finishing first — noted honestly | 2026-10-12 |
+| 2h two-speaker speech → transcription | TTS-generated stereo speech (135 MB, L/R speakers) | import → extract → AssemblyAI → Doc | _in progress_ | _pending_ |
 
 ¹ Synthetic sine tones make opus VBR overshoot its 48k nominal; real speech lands near
 ~43 MB for 2h. Either size is far below AssemblyAI's 5 GB limit and trivially held in
