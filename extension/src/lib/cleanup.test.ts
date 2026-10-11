@@ -6,8 +6,8 @@ import { createRecordingJob } from './jobs';
 import type { Job } from './state/types';
 
 const NOW = Date.parse('2026-10-08T12:00:00Z');
-const OLD_ENOUGH = '2026-10-07T10:00:00Z'; // >24h before NOW
-const TOO_RECENT = '2026-10-08T11:00:00Z';
+const OLD_ENOUGH = '2026-10-08T11:00:00Z'; // >10min before NOW
+const TOO_RECENT = '2026-10-08T11:55:00Z'; // 5min before NOW, inside the grace
 
 function uploadedJob(overrides: Partial<Job> = {}): Job {
   const base = createRecordingJob({
@@ -61,7 +61,7 @@ it('deletes the local copy after a verified upload past the grace period', async
   expect((await db.jobs.get('job-clean-1'))?.segmentCount).toBe(0);
 });
 
-it('waits out the 24h grace period', async () => {
+it('waits out the grace period', async () => {
   await db.jobs.put(
     uploadedJob({
       stages: {

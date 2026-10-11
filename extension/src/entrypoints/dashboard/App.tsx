@@ -145,7 +145,7 @@ export default function App() {
         <p className="storage-meter">
           Local recording storage: {formatBytes(storage.usage)} used ·{' '}
           {formatBytes(Math.max(0, storage.quota - storage.usage))} free. Local copies are
-          removed automatically 24h after a verified upload.
+          removed automatically a few minutes after a verified upload.
           {' · '}
           <button className="import-btn" onClick={() => importRef.current?.click()}>
             Import file (debug)

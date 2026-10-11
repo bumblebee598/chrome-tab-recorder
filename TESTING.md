@@ -28,7 +28,7 @@ test (`RUN_LOAD_TESTS=1 uv run pytest tests/load -s`).
 | P3 | Recovery routine: `recording` jobs with segments → pending_upload(recovered); zero segments → failed | Auto | `recovery.test.ts` (3 cases) | ✅ |
 | P4 | Disk quota gate: below floor blocked, low space warns, plenty quiet | Auto + 1 manual | `quota.test.ts` (4 cases); manual spot-check on a nearly full disk | ✅ auto |
 | P5 | History survives extension reload + browser restart: all rows + links present | Manual | 10 jobs, reload, restart | |
-| P6 | Local copy deleted only after size-verified upload + 24h; never for pending/failed; unverifiable → kept | Auto | `cleanup.test.ts` (5 cases) | ✅ |
+| P6 | Local copy deleted only after size-verified upload + ~10min grace; never for pending/failed; unverifiable → kept | Auto | `cleanup.test.ts` (5 cases) | ✅ |
 
 ## 3. Upload, retry, dedup
 

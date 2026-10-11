@@ -1,6 +1,6 @@
 // Once Drive confirms the upload, Drive is the durable copy — the backend
 // reads from there, never from this machine — so the local OPFS copy only
-// costs disk. Rule: verify size parity with Drive, wait out a 24h grace
+// costs disk. Rule: verify size parity with Drive, wait a short grace
 // period, then delete the local segments. (The review suggested md5Checksum
 // too, but WebCrypto has no MD5 and hashing multi-GB files in a service
 // worker isn't worth it; Drive already integrity-checks resumable uploads.)
@@ -10,7 +10,7 @@ import { db } from './db';
 import { deleteRecording, segmentStats } from './opfs';
 import type { LocalStatus } from './state/types';
 
-const GRACE_MS = 24 * 60 * 60 * 1000;
+const GRACE_MS = 10 * 60 * 1000;
 
 const VERIFIABLE: LocalStatus[] = [
   'uploaded',
