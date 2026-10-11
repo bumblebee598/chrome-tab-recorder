@@ -362,7 +362,11 @@ export default function App() {
               </div>
               <div className="job-meta">
                 <span>{formatWhen(job.createdAt)}</span>
-                {job.totalBytes !== null && <span>{formatBytes(job.totalBytes)}</span>}
+                {job.localStatus === 'uploading' && job.totalBytes ? (
+                  <span>{Math.round((job.uploadedBytes / job.totalBytes) * 100)}% uploaded</span>
+                ) : (
+                  job.totalBytes !== null && <span>{formatBytes(job.totalBytes)}</span>
+                )}
                 {job.mode === 'audio' && <span>audio</span>}
                 {driveLink(job) && (
                   <a href={driveLink(job)!} target="_blank" rel="noreferrer">

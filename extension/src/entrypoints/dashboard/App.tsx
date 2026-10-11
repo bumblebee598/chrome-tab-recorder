@@ -191,6 +191,12 @@ export default function App() {
                 <td>{job.totalBytes !== null ? formatBytes(job.totalBytes) : '—'}</td>
                 <td>
                   <span className={`chip chip-${job.localStatus}`}>{chipLabel(job)}</span>
+                  {job.localStatus === 'uploading' && job.totalBytes ? (
+                    <div className="retry-line">
+                      {Math.round((job.uploadedBytes / job.totalBytes) * 100)}% ·{' '}
+                      {formatBytes(job.uploadedBytes)} of {formatBytes(job.totalBytes)}
+                    </div>
+                  ) : null}
                   {retryLine(job) && <div className="retry-line">{retryLine(job)}</div>}
                   {job.localStatus === 'failed' && job.lastError && (
                     <div
