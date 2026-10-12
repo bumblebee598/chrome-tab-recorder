@@ -21,9 +21,10 @@ Extension (MV3)                                GCP
 
 Four principles drive everything:
 
-1. **Media never touches our servers.** The browser uploads directly to the user's Drive;
-   the backend reads it back from Drive. Cloud Run's 32 MB request cap never matters, and
-   storage cost/quota is the user's own Drive.
+1. **The video never passes through our servers.** The browser uploads it straight to the
+   user's Drive, and the backend only ever handles the small extracted audio track
+   (~40–70 MB for two hours, purged from Cloud Storage after 7 days). Cloud Run's 32 MB
+   request cap never matters, and video storage is the user's own Drive quota.
 2. **No component ever waits on a slow operation.** Every backend stage finishes in
    seconds-to-minutes; transcription completion arrives by webhook with a polling backup.
 3. **Forward-only state.** One shared state machine (implemented in both TypeScript and
@@ -52,6 +53,13 @@ The manifest pins a public key, so the extension ID — and therefore the OAuth 
 URL — is identical on every machine.
 
 Stack: WXT (Vite-based MV3 framework), React 18, TypeScript, Dexie.
+
+Tab audio and microphone are both on by default, and either can be switched off before
+recording starts (plus an audio-only mode). Every job row shows its name, creation time,
+current status, retry state ("attempt 3 · next try in 2m"), and Drive/Doc links once they
+exist. The statuses match the brief: Pending upload, Uploading, Uploaded, Queued for
+transcription, Transcribing, Completed and Failed, plus a "Sign-in needed" pause state.
+History lives in IndexedDB, so it survives extension reloads and browser restarts.
 
 ## 2. Tab recording implementation
 
@@ -102,6 +110,10 @@ refuses below a 500 MB floor.
 
 ## 4. Upload retry logic
 
+Recordings land in a "Tab Recorder" folder the extension creates in the user's Drive on
+first upload. When an upload finishes, the Drive file ID is stored on the job record —
+that ID is what the backend receives at registration and the only handle it ever needs.
+
 A durable queue runner in the service worker:
 
 - **Single-flight**: a `chrome.storage.session` lease (TTL 90 s, renewed after every
@@ -117,9 +129,14 @@ A durable queue runner in the service worker:
   same request; a second 401 pauses the job at `needs_sign_in`. Signing in resumes every
   paused job automatically.
 
-## 5. Duplicate job prevention
+## 5. Duplicate prevention and idempotency
 
-Seven layers, all keyed on the client-generated UUID; each covered by an automated test:
+Every backend handler follows one rule: read the job first, and if your step is already
+done, return success and do nothing. Combined with named tasks and the forward-only state
+machine, delivering the same work twice is harmless everywhere.
+
+Beyond that rule, seven layers, all keyed on the client-generated UUID; each covered by
+an automated test:
 
 1. **Resumable session reuse** — session URI + committed byte offset persisted after
    every chunk; on resume, a `bytes */total` probe tells us where to continue.
@@ -157,6 +174,15 @@ bounded, and preferred over the extra scope/complexity of closing them.
   principal with `run.invoker` on the private worker. Verification happens at the Cloud
   Run platform layer; no token code in the app.
 
+**Retry, in one view:**
+
+| Layer | How it retries | Limit | After that |
+| --- | --- | --- | --- |
+| Extension upload | backoff 30 s → 30 min with jitter | 10 attempts | `failed`, manual Retry |
+| Pipeline stage | Cloud Tasks backoff 10 s → 10 min | 8 attempts | job wedges mid-stage; Retry re-enqueues from the first missing step (`generation+1`) |
+| Transcription check | scheduled polls 15 min → 1 h | 12 polls (~10.5 h total) | `TRANSCRIPT_TIMEOUT`, failure email |
+| Manual | Retry button → local queue and/or `POST /v1/jobs/{id}/retry` | any non-completed job | — |
+
 ## 7. Transcription orchestration
 
 **Provider: AssemblyAI.** The 2-hour requirement eliminated the alternatives: OpenAI caps
@@ -170,8 +196,8 @@ Pipeline (each step a separate idempotent task):
 1. **extract** — mints a user access token from the stored refresh token, streams the
    Drive file in 16 MiB `Range` reads (3 retries on 5xx) straight into
    `ffmpeg -i pipe:0 -vn -ac {channels} -c:a libopus -b:a 48k`. The video never exists on
-   server disk; only the ~40–70 MB ogg lands in `/tmp` (RAM-backed), then GCS. Measured:
-   a 2-hour stereo file extracts in **43 s** with ffmpeg peaking at **16 MB RSS**.
+   server disk; only the ~40–70 MB ogg lands in `/tmp` (RAM-backed), then GCS. In a
+   two-hour benchmark, extraction took **43 s** with ffmpeg peaking at **16 MB** of memory.
 2. **transcribe-submit** — 24 h V4 signed URL for the GCS object (signed via the IAM
    signBlob API, since Cloud Run service credentials carry no private key) → AssemblyAI
    with `multichannel`, `speaker_labels`, `webhook_url` carrying the job ID and a secret
@@ -184,6 +210,10 @@ Pipeline (each step a separate idempotent task):
      fetch transcript status; completion enqueues the same named finalize task, error or
      exhaustion fails the job. This path alone carried local development, where
      AssemblyAI cannot reach a laptop.
+
+Long audio needs no special handling: a two-hour file is one request, submission returns
+in milliseconds, and nothing on our side runs or waits while AssemblyAI works. A 10-hour
+recording would follow exactly the same path.
 
 Backend progress mirrors to the client by status polling (`GET /v1/jobs?ids=`); the
 extension replays the status onto its local job via the same forward-only events, so
@@ -217,7 +247,8 @@ Second half of finalize, behind an `EmailSender` protocol:
 
 - **GmailSender** (default): MIME multipart (text + HTML), an `X-Job-Id` header for
   traceability, base64url-encoded into `users.messages.send` — sent *as* the user, *to*
-  the user. Works for any OAuth test user with zero signup or domain verification.
+  the user, so it arrives like any other message they have sent themselves. Works for any
+  OAuth test user with zero signup or domain verification.
 - **ResendSender**: drop-in fallback behind the same interface.
 - **At-most-once**: `emailSending` is written before the API call, `emailSentAt` after;
   finalize short-circuits when `emailSentAt` exists. Content: recording name, Drive link,
@@ -246,20 +277,17 @@ return 200.* Combined with named tasks and the forward-only state machine (36 sh
 fixture cases executed by both the TS and Python implementations), at-least-once delivery
 is safe everywhere.
 
-**Retry logic, in one view:**
-
-| Layer | Mechanism | Bound | After exhaustion |
-| --- | --- | --- | --- |
-| Extension upload | persisted backoff 30 s→30 min + jitter | 10 attempts | `failed`, manual Retry |
-| Cloud Tasks stage | queue backoff 10 s→10 min | 8 attempts | job wedges mid-stage → manual Retry re-enqueues with `generation+1` |
-| Transcription poll | scheduled tasks 15 min→1 h | 12 polls | `TRANSCRIPT_TIMEOUT`, failure email |
-| Manual | Retry button → local queue and/or `POST /v1/jobs/{id}/retry` | allowed from any non-completed state | — |
+**Retry logic** across all layers is summarized in the table at the end of §6.
 
 **Failure handling.** Every failure mode has a code, a user-facing message, a recovery
 path, and a reproduction recipe — the full matrix is `docs/ERRORS.md` (14 scenarios).
 Transient vs permanent is encoded in HTTP semantics (503 = queue retries, 200+failed =
 stop and tell the user). A `FAIL_STAGE=stage:N` flag injects failures for demos and tests.
-Terminal failures email the user once.
+Terminal failures email the user once. Two scenarios the brief calls out explicitly:
+**backend down** — the upload still completes, the job rests at `Uploaded`, and the
+extension re-attempts registration on every queue tick until the backend returns;
+**Google API errors and rate limits (5xx/429)** — retried with backoff on both sides
+(the extension's chunk retries, Cloud Tasks' stage retries).
 
 **Scaling considerations.**
 - *Per-user isolation by design*: media sits in each user's Drive, so our storage and

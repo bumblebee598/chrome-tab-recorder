@@ -1,12 +1,13 @@
 import { MAX_AUTO_ATTEMPTS } from './state/transition';
 import type { Job, LocalStatus } from './state/types';
 
+// Labels match the brief's queue-state names verbatim
 export const STATUS_LABELS: Record<LocalStatus, string> = {
   recording: 'Recording',
-  pending_upload: 'Ready to upload',
+  pending_upload: 'Pending upload',
   uploading: 'Uploading',
   uploaded: 'Uploaded',
-  queued_for_transcription: 'Queued',
+  queued_for_transcription: 'Queued for transcription',
   transcribing: 'Transcribing',
   completed: 'Completed',
   failed: 'Failed',

@@ -31,7 +31,8 @@ shared/schema/    job.schema.json — the Job contract (single source of truth)
 shared/fixtures/  transitions.json — state-machine table run by BOTH languages
 infra/setup.sh    one-command GCP bootstrap + deploy
 scripts/          synthetic test media, extension key generation
-docs/             HOW_IT_WORKS, STATE_MACHINE, ERRORS (failure matrix), VALIDATION (benchmarks)
+docs/             ARCHITECTURE (system overview), ERRORS (failure matrix),
+                  VALIDATION (2-hour evidence), TEST_REPORT, HOW_IT_WORKS, STATE_MACHINE
 .devcontainer/    Codespaces: Python 3.12, Node 20, Java 21, gcloud, ffmpeg, docker-in-docker
 ```
 
@@ -41,9 +42,13 @@ The backend is deployed; [`dist/chrome-mv3.zip`](dist/chrome-mv3.zip) is prebuil
 
 1. Download and unzip `dist/chrome-mv3.zip`.
 2. `chrome://extensions` → Developer mode → **Load unpacked** → select the unzipped folder.
-3. Popup → **Sign in with Google** (your email must be on the OAuth test-user list).
+3. Popup → **Sign in with Google** (your email must be on the OAuth test-user list — ask
+   to be added).
 4. Record any tab for ~30 seconds, stop, and watch: Uploading → Transcribing → Completed,
    ending with a Doc in your Drive and an email with both links.
+
+> The OAuth app is in Google's testing mode: sign-ins are limited to listed test users,
+> and refresh tokens expire after 7 days, so you may be asked to sign in again.
 
 ## Building from source (Codespaces or local)
 
@@ -79,7 +84,13 @@ machine: `nfphhdblmoifbnbieoodhchadpcgnfjd`.
 ## Environment configuration
 
 Two gitignored env files, with committed `*.example` templates. Copy each template, fill
-in the values, and you're done — `make gen-secrets` prints the three random ones.
+in the values, and you're done.
+
+**Getting your keys:**
+- **AssemblyAI** — create an account at assemblyai.com; the API key is on the dashboard
+  home. Goes in `ASSEMBLYAI_API_KEY`.
+- **Google OAuth client ID + secret** — created in the GCP console (next section).
+- **The three random secrets** — `make gen-secrets` prints ready-to-paste values.
 
 **`backend/.env`** — everything the API and worker need:
 
@@ -138,7 +149,7 @@ printed api URL into `extension/.env` and rebuild.
 
 | Store | Contents | Lifetime |
 | --- | --- | --- |
-| **OPFS** (private extension filesystem) | The recording itself: one file per 5-second chunk (`/recordings/{jobId}/seg-NNNNNN.webm`) + `manifest.json`. Each chunk is committed on close, so a crash loses ≤ ~5s. | Deleted automatically 24h after the upload is **verified** (Drive file ID saved + Drive-reported size matches local bytes). Until then it's the durable source of truth. |
+| **OPFS** (private extension filesystem) | The recording itself: one file per 5-second chunk (`/recordings/{jobId}/seg-NNNNNN.webm`) + `manifest.json`. Each chunk is committed on close, so a crash loses ≤ ~5s. | Deleted automatically ~10 minutes after the upload is **verified** (Drive file ID saved + Drive-reported size matches local bytes). Until then it's the durable source of truth. |
 | **IndexedDB** (`jobs` table) | One record per recording: status, sizes, Drive/Doc IDs, error + retry bookkeeping. | Kept forever — this is the visible job history; it survives restarts and local-copy cleanup. |
 | **chrome.storage.local** | Toggle preferences, auth session token. | Until sign-out. |
 | **chrome.storage.session** | "Recording right now" marker, cached access token, queue lock. | Cleared when the browser closes. |
@@ -188,7 +199,7 @@ Everything keys on the **job UUID generated at recording time**:
 ## Testing
 
 ```sh
-make test                                        # 78 backend + 76 extension tests
+make test                                        # 80 backend + 87 extension tests
 cd backend && RUN_LOAD_TESTS=1 uv run pytest tests/load -s   # 2h extraction benchmark
 ./scripts/gen_synthetic.sh 7200 video            # 2h synthetic recording for stress tests
 ```

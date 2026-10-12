@@ -22,9 +22,9 @@ exhausted queue retries is recoverable). A **Sign in with Google** button plus a
 | Recording has no audio channels | `NO_AUDIO` | no | failed | "Recording has no audio to transcribe" | — (video-only is never submitted) | Record with both audio toggles off |
 | ffmpeg / Drive stream hiccup (transient) | — (503 to queue) | auto (queue: 8 tries, 10s→10m) | stays `extracting_audio` | stage chip "Preparing audio" | Cloud Tasks retries; if exhausted → Retry button re-enqueues (generation+1) | `FAIL_STAGE=extract:2` on the worker |
 | AssemblyAI reports error | `TRANSCRIPT_ERROR` | manual | failed + failure email | "Transcription failed" | Retry (resumes at transcribe stage) | Submit an invalid audio URL |
-| Transcription never finishes (~3h of polls) | `TRANSCRIPT_TIMEOUT` | manual | failed + failure email | "Transcription timed out" | Retry | — |
+| Transcription never finishes (12 polls over ~10.5 h) | `TRANSCRIPT_TIMEOUT` | manual | failed + failure email | "Transcription timed out" | Retry | — |
 | Docs API rejects Doc creation/write | `DOC_FAILED` | manual | failed + failure email | "Couldn't create the transcript Doc" | Retry (resumes at finalize; adopts existing Doc) | `FAIL_STAGE=finalize:8`, or revoke Docs scope |
-| Gmail send fails | `EMAIL_FAILED` | manual | failed | "Couldn't send the email" | Retry (Doc already exists; only email re-runs) | Gmail API quota / revoke scope |
+| Gmail send fails | `EMAIL_FAILED` | manual | failed — deliberate: the Doc link is already present and working, but we surface the failure rather than claim completion | "Couldn't send the email" | Retry re-runs only the email (Doc untouched) | Gmail API quota / revoke scope |
 
 **Fault injection** (demos and tests): deploy/run the worker with `FAIL_STAGE=<stage>:<n>`
 (`extract`, `transcribe-submit`, `finalize`) and the first *n* deliveries of that stage
