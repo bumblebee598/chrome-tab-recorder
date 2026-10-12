@@ -92,7 +92,7 @@ Crash recovery: on startup and on a 1-minute heartbeat, any job still marked `re
 with no live session is salvaged — segments on disk → `pending_upload (recovered)`,
 nothing written → failed. Verified by killing Chrome mid-recording.
 
-Retention: the local copy is deleted automatically 24 h after upload is **verified**
+Retention: the local copy is deleted automatically ~10 minutes after upload is **verified**
 (Drive file ID saved and Drive-reported size equals local bytes). Job history is kept
 forever. Backend retries read from Drive, never from the client, so deletion is safe.
 
@@ -275,3 +275,146 @@ Terminal failures email the user once.
   recording; the 7-day GCS purge means a retry >1 week after extraction re-runs extract
   (stale-pointer edge documented); there's no dead-letter queue — wedged jobs surface in
   the UI with a Retry instead. Each is revisitable if usage outgrows the current shape.
+
+## 11. GCP services, one by one
+
+Everything lives in a single GCP project, provisioned by `infra/setup.sh`
+(`bootstrap → secrets → deploy`, idempotent).
+
+**Cloud Run — two services.**
+`tab-rec-api` (public): FastAPI, 1 vCPU / 512 MiB, 300 s timeout. Handles OAuth exchange
+and token refresh, job registration, status reads, and the AssemblyAI webhook. Public
+because the extension and AssemblyAI both need to reach it; everything sensitive on it is
+protected by the session JWT or the webhook secret.
+`tab-rec-worker` (private): FastAPI, 2 vCPU / 2 GiB, 1800 s timeout, `concurrency=1`.
+Runs the pipeline stages; sized for ffmpeg (CPU-bound, so one job per instance — scale
+comes from Cloud Run adding instances, not threads). `--no-allow-unauthenticated`: the
+only identity with `run.invoker` on it is the task-invoker service account, enforced by
+Cloud Run's own IAM layer, so there is zero auth code in the handlers. Both deploy from
+source: Cloud Build builds the Dockerfile (python:3.12-slim + ffmpeg + uv) and pushes to
+**Artifact Registry**; the deploy script wires each service's URL into the other's env.
+
+**Cloud Tasks — three queues**, `extract`, `transcribe-submit`, `finalize`, each
+8 attempts with 10 s → 10 min exponential backoff (mechanics in §12). Per-stage queues
+mean a storm of retries in one stage never starves another.
+
+**Firestore (Native mode)** — two collections.
+`jobs/{uuid}`: the orchestration record — remoteStatus, generation counter, driveFileId,
+audioGcsUri, transcriptId, docId, contentWritten/emailSentAt markers, error. Document ID
+is the client UUID (creation idempotent via `doc.create`); every status move is a
+transactional compare-and-set on `remoteStatus`, so concurrent handlers get exactly one
+winner. `users/{sub}`: email + the Fernet-encrypted Google refresh token, keyed by the
+Google account's stable subject ID.
+
+**Cloud Storage** — one bucket for extracted audio (`audio/{jobId}.ogg`), uniform access,
+lifecycle rule deletes objects after 7 days (transcription is long done by then).
+AssemblyAI fetches via 24-hour V4 signed URLs; since Cloud Run credentials are token-only
+(no private key), signing goes through the IAM `signBlob` API — which is why the worker
+SA holds `serviceAccountTokenCreator`.
+
+**Secret Manager** — five secrets (AssemblyAI key, OAuth client secret, session-JWT key,
+webhook secret, Fernet key), loaded from `backend/.env` by `setup.sh secrets` and mounted
+into Cloud Run as env vars. Nothing sensitive in images or code.
+
+**IAM — three dedicated service accounts.**
+`tab-rec-api` and `tab-rec-worker` (runtime identities): `datastore.user`,
+`secretmanager.secretAccessor`, `cloudtasks.enqueuer`, bucket `objectAdmin`; worker
+additionally `serviceAccountTokenCreator` (URL signing). `tab-rec-tasks-invoker`: owns
+`run.invoker` on the worker and nothing else — it exists purely to be the OIDC identity
+stamped on tasks, so both runtime SAs also hold `iam.serviceAccountUser` (*actAs*) on it.
+Plus one non-obvious grant modern projects need: `cloudbuild.builds.builder` on the
+default compute SA, or source deploys fail at the upload step.
+
+**Google Auth Platform** — External + Testing consent screen (sign-in hard-limited to
+listed test users), one Web-application OAuth client whose redirect is the extension's
+pinned `chromiumapp.org` URL. Scopes: `openid email`, `drive.file`, `gmail.send`.
+Testing-mode refresh tokens expire after 7 days (documented demo caveat).
+
+Drive, Docs, and Gmail are consumed as user-delegated Google APIs (the user's own OAuth
+grant), not project infrastructure: files and Docs are owned by the user, email is sent
+as the user. The backend's only Google-API credential is the refresh token it stores.
+
+## 12. Cloud Tasks mechanics, precisely
+
+A stage transition is an HTTP task: `{queue, name, url, OIDC identity, JSON body, optional
+schedule_time}`. The lifecycle:
+
+1. **Enqueue.** The api or worker calls `CreateTask` with an explicit name:
+   `{stage}-{sha256(jobId)[:16]}-g{generation}`. Names are unique per queue; creating a
+   task whose name already exists returns `ALREADY_EXISTS`, which we treat as success.
+   This is the dedup primitive: webhook and poll can race to enqueue `finalize`, a client
+   can re-register a job, a handler can be re-run — the queue collapses all of it into
+   one delivery. (Google reserves recently used names for a while, which is why retries
+   get a fresh `generation` suffix rather than reusing the old name.)
+2. **Dispatch.** Cloud Tasks POSTs the body to the worker URL with an OIDC token minted
+   for the invoker SA (`audience` = worker URL). Cloud Run validates the token before our
+   code runs. The dispatch deadline is 30 minutes — the worker's own timeout is set to
+   match, so a stage can never outlive its delivery window unnoticed.
+3. **Ack semantics.** 2xx = task done, delete it. Anything else = retry after backoff
+   (10 s doubling to 10 min, 8 attempts). Handlers exploit this deliberately: transient
+   faults (Drive 5xx, ffmpeg hiccup, transcript not ready yet) return **503** so the
+   queue retries; permanent faults (revoked auth, Docs API refusal) write
+   `remoteStatus=failed` with an error code and return **200** so the queue *stops* and
+   the user gets a Retry button instead of seven more doomed attempts.
+4. **At-least-once.** Delivery can duplicate; every handler's first action is to read the
+   job and return 200 if its stage artifact already exists (audioGcsUri, transcriptId,
+   contentWritten, emailSentAt). Combined with the CAS status moves, redelivery is a
+   no-op, proven by running every handler twice in tests.
+5. **Scheduled tasks.** `schedule_time` is how the polling backup works: submit schedules
+   a poll 15 minutes out; each poll that finds the transcript still processing schedules
+   the next with a longer delay (to 1 h, 12 polls max). No cron, no sleeping worker —
+   just future-dated tasks.
+6. **Exhaustion.** If all 8 attempts fail, the task is dropped — the job wedges in its
+   current status. Recovery path: `POST /v1/jobs/{id}/retry` bumps the generation
+   counter (new task names, so dedup doesn't block the redo) and re-enqueues from the
+   first missing artifact. Stale work from the old generation is ignored: a late webhook
+   whose transcript ID doesn't match the job's current one is acknowledged and discarded.
+
+Locally the same code runs against an open-source Cloud Tasks emulator in docker-compose,
+with queues pre-created at startup.
+
+## 13. Extension storage internals: IndexedDB and OPFS
+
+**IndexedDB (via Dexie) — the job queue and history.** One table, `jobs`, primary key
+`jobId`, secondary indexes on `localStatus` and `createdAt` — exactly the two access
+patterns the system has: "give me eligible work, oldest first" (queue runner, recovery,
+status polling all filter on `localStatus`) and "newest first" (UI lists). Every state
+change goes through one function, `applyEvent(jobId, event)`: a Dexie read-modify-write
+transaction that loads the record, runs the pure `transition()` function, and writes the
+result. Since the transition is monotonic, racing writers can interleave without
+corrupting anything — a replay produces the same record. IndexedDB was chosen over
+`chrome.storage.local` because the latter is a 10 MB JSON key-value store with no
+indexes and no transactions; it would need a full serialize-deserialize of the whole job
+list per update. Crucially, IndexedDB is shared across all extension contexts (popup,
+dashboard, worker, offscreen), so the offscreen recorder can update `segmentCount` while
+the popup reads it live.
+
+**OPFS — the media.** The Origin Private File System is a real filesystem sandboxed to
+the extension's origin: invisible in Finder, not synced, accessed via
+`navigator.storage.getDirectory()`. Layout: `/recordings/{jobId}/seg-000000.webm …` plus
+a `manifest.json` (mime, channel count, totals, wall-clock duration). Two properties do
+all the work:
+
+- *Commit-on-close.* `createWritable()` writes to a hidden temp file and atomically
+  swaps it in on `close()`. A long-lived writer would therefore commit nothing until the
+  end — the opposite of durable. So the recorder opens a writer per 5-second chunk:
+  write, close, done. Each close is a durability checkpoint; crash loss is bounded by
+  one chunk.
+- *Disk-backed `File` handles.* Reading a segment via `getFile()` yields a `File` whose
+  bytes stay on disk. `new Blob([f0, f1, …f1439])` is a lazy concatenation — slicing out
+  an 8 MiB upload chunk or feeding a download never materializes the multi-GB whole in
+  memory. Byte-concatenation is valid because the segments are one continuous
+  MediaRecorder stream split at blob boundaries, not independently containerized files.
+
+Quota and lifecycle: the extension holds `unlimitedStorage` (exempts the data from
+Chrome's eviction under disk pressure) and calls `navigator.storage.persist()`; before
+recording, `storage.estimate()` gates on free space (hard floor 500 MB, warning below a
+projected 2-hour recording). After upload, cleanup deletes a job's segment directory only
+once Drive's reported size equals the local byte count and a ~10-minute grace has passed;
+the IndexedDB record — with its Drive and Doc links — is kept indefinitely as history.
+
+The remaining two stores are deliberately small: `chrome.storage.local` holds the toggle
+prefs and the backend session token (durable config), and `chrome.storage.session` holds
+the live-recording marker, the queue's single-flight lease, and the cached access token —
+state whose correct lifetime is exactly one browser session, so the store's volatility is
+a feature, not a limitation.
