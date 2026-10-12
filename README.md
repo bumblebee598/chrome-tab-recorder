@@ -81,7 +81,7 @@ machine: `nfphhdblmoifbnbieoodhchadpcgnfjd`.
 1. Repo page → **Code** → **Codespaces** → **Create codespace on main**. First boot
    provisions the devcontainer and installs all dependencies; wait for the setup
    terminal to finish (~5 min).
-2. `make test` → expect **80 passed, 1 skipped** (backend) and **87 passed** (extension).
+2. `make test` → expect **80 passed, 1 skipped** (backend) and **88 passed** (extension).
    (If `uv` isn't found: `export PATH="$HOME/.local/bin:$PATH"` and retry.)
 3. `make dev` → Firestore + Cloud Tasks emulators, api, and worker start (first run pulls
    emulator images). In a second terminal: `curl localhost:8000/health` →
@@ -216,7 +216,7 @@ Everything keys on the **job UUID generated at recording time**:
 ## Testing
 
 ```sh
-make test                                        # 80 backend + 87 extension tests
+make test                                        # 80 backend + 88 extension tests
 cd backend && RUN_LOAD_TESTS=1 uv run pytest tests/load -s   # 2h extraction benchmark
 ./scripts/gen_synthetic.sh 7200 video            # 2h synthetic recording for stress tests
 ```

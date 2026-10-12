@@ -1,6 +1,6 @@
 # Automated Test Report
 
-As of 2026-10-12. Totals: **80 backend (pytest) + 87 extension (vitest)**, all passing,
+As of 2026-10-12. Totals: **80 backend (pytest) + 88 extension (vitest)**, all passing,
 plus one gated load benchmark. Run everything with `make test`; the benchmark with
 `RUN_LOAD_TESTS=1 uv run pytest tests/load -s`. Each section: what we tried, what
 happened, and why the result holds — tied to the architecture.

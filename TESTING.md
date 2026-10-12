@@ -4,7 +4,7 @@ Every row traces to a line in the brief. **Auto** rows run in `make test` (file 
 named); **Manual** rows are a real Chrome session — record each as evidence/demo B-roll.
 Fill the Outcome column as runs complete: ✅ pass · ❌ fail (link issue) · ➖ n/a.
 
-Automated totals: **80 backend (pytest) + 86 extension (vitest)**, plus the gated load
+Automated totals: **80 backend (pytest) + 88 extension (vitest)**, plus the gated load
 test (`RUN_LOAD_TESTS=1 uv run pytest tests/load -s`).
 
 ## 1. Recording
