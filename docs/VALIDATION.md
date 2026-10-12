@@ -1,51 +1,81 @@
-# Large-file validation (Part D)
+# Large-file validation
 
-Evidence for the 2-hour claim. Synthetic media comes from `scripts/gen_synthetic.sh`;
-it enters the real pipeline via the dashboard's **Import file (debug)** action
-(slices any webm into 8 MiB OPFS segments and queues it exactly like a recording).
+The brief asks for recordings up to two hours at high resolution, which lands around
+2.5–3.5 GB of webm. This file records what we actually measured, and then walks through
+where a file that size lives at each point in the system and why no single step has to
+care how big it is.
+
+Test media comes from `scripts/gen_synthetic.sh`. The dashboard has an
+"Import file (debug)" action that slices any webm into 8 MiB OPFS segments and queues it
+exactly as if it had been recorded, so synthetic files run through the real pipeline,
+not a test harness.
 
 ## Measured results
 
-| Test | Input | Stage | Result | Measured on |
-| --- | --- | --- | --- | --- |
-| 2h stereo audio extraction (`RUN_LOAD_TESTS=1 uv run pytest tests/load -s`) | 153 MB webm (opus 128k, 7200s) | ffmpeg pipeline (`extract_audio_to_ogg`, 16 MiB chunks) | **43 s**, output 68.6 MB ogg¹, RSS: python 79 MB / ffmpeg 16 MB | 2026-10-09, M-series MacBook |
-| Synthetic generation speed | `gen_synthetic.sh 7200 audio` | — | 62 s | same |
-| 1h synthetic video → Drive upload (2h scaled: disk allowed 1.2 GB × 2 copies) | `gen_synthetic.sh 3600 video` (1.2 GB) | dashboard import → OPFS → Drive resumable | uploaded completely; **exactly one Drive file**; local copy auto-deleted after size verification (which doubles as the integrity check) | 2026-10-12, residential uplink |
-| Network-drop resume | 1.2 GB upload in flight | Wi-Fi off 60 s at **6% (67 MB)** | status showed "Connection lost · attempt 1"; resumed **from 6%**, not zero; single Drive file | 2026-10-12 |
-| Real recording 60 min, full pipeline | real tab+mic recording (~780 MB ≈ **13 MB/min**) | record → Drive → transcript → Doc → email | full pipeline completed unattended; email + Doc delivered | 2026-10-12 |
-| Service-worker kill mid-upload | OS-level `kill` of the extension process | upload | covered by automated resume tests (`driveUpload.test.ts` probe/offset cases); two live kill attempts were outrun by the upload finishing first — noted honestly | 2026-10-12 |
-| 2h two-speaker speech → transcription | TTS-generated stereo speech (135 MB, L/R speakers) | import → extract → AssemblyAI → Doc | _in progress_ | _pending_ |
+| Test | Input | What happened | Date |
+| --- | --- | --- | --- |
+| 2h audio extraction (`RUN_LOAD_TESTS=1 uv run pytest tests/load -s`) | 153 MB stereo webm, 7200s | extracted in **43 s**, output 68.6 MB ogg¹, ffmpeg peaked at 16 MB RSS (python wrapper 79 MB) | 2026-10-09 |
+| Synthetic generation speed | `gen_synthetic.sh 7200 audio` | 62 s to generate | 2026-10-09 |
+| 1.2 GB video upload, interrupted | `gen_synthetic.sh 3600 video`, imported via dashboard | upload completed; exactly one file in Drive. Local copy was auto-deleted afterwards, which only happens once the extension confirms Drive's reported size matches the local bytes, so cleanup doubled as the integrity check | 2026-10-12 |
+| Network drop mid-upload | same 1.2 GB upload, Wi-Fi off 60 s at 6% (67 MB) | status showed "Connection lost · attempt 1"; on reconnect it resumed from 6%, not from zero | 2026-10-12 |
+| Real 60-minute recording, 1080p | tab + mic, ~780 MB (≈13 MB/min) | full pipeline ran unattended: Drive, transcript, Doc, email | 2026-10-12 |
+| Service-worker kill mid-upload | OS-level kill of the extension process | attempted twice; the upload finished before the kill landed both times. The resume path this was meant to exercise is covered by the automated resumable-protocol tests (`driveUpload.test.ts`) | 2026-10-12 |
+| 2h two-speaker speech through transcription | 135 MB stereo speech file, distinct voice per channel | in progress | — |
 
-¹ Synthetic sine tones make opus VBR overshoot its 48k nominal; real speech lands near
-~43 MB for 2h. Either size is far below AssemblyAI's 5 GB limit and trivially held in
-Cloud Run memory.
+¹ Opus VBR overshoots its 48k nominal on pure sine tones; real speech encodes close to
+nominal (~43 MB for 2h). Either number is small enough that it doesn't matter downstream.
 
-## Why the 2-hour claim holds (measured + by construction)
+## Why file size doesn't accumulate anywhere
 
-- **Extraction is ~170× realtime** on a laptop (43 s for 7200 s of audio); the Cloud Run
-  worker has a 30-minute task budget — two orders of magnitude of headroom.
-- **Memory is flat**: the video streams Drive→ffmpeg in 16 MiB chunks (never written to
-  disk); ffmpeg held 16 MB RSS. Only the ~40–70 MB audio output touches /tmp (RAM-backed,
-  2 GiB available).
-- **Upload scales by construction**: 8 MiB chunks with the offset persisted after each —
-  a 2.3 GB upload is just ~290 iterations of the same tested loop, resumable at any point.
-- **AssemblyAI limits**: 2h stereo audio ≈ 43–70 MB via signed URL — far under the 5 GB /
-  10h caps; async API, so duration never holds a connection open.
+Follow a 3 GB recording through the system. At no point does any component hold more
+than a few megabytes of it at once, which is the whole trick.
 
-## How to reproduce
+**While recording**, MediaRecorder hands the extension a compressed chunk every five
+seconds and each chunk is written to OPFS as its own file, committed on close. Memory
+stays flat for hours because nothing is ever buffered beyond the current chunk, and a
+crash costs at most the five seconds that hadn't been flushed. The 60-minute real
+recording wrote about 13 MB/min this way.
+
+**During upload**, the file goes from the browser directly to the user's Drive in 8 MiB
+slices. The job record stores the upload session URI and the confirmed byte offset after
+every slice, so an interruption of any kind (network, service worker death, browser
+quit) resumes by asking Drive how much it has and continuing from there. That is what
+the 6%-cut test shows: a 3 GB file is just more slices, not a different problem. Our
+servers are not involved in this hop at all, so Cloud Run's 32 MB request limit and our
+bandwidth bill are both irrelevant to video size.
+
+**For transcription**, the worker never downloads the video. It streams it from Drive in
+16 MiB range reads, pipes them straight into ffmpeg's stdin, and keeps only the audio
+output: two hours of video reduce to a 40–70 MB ogg. Measured, that extraction runs
+about 170× faster than realtime (43 s for 2 h) inside a 30-minute task budget, with
+ffmpeg holding 16 MB of memory. The audio goes to a GCS bucket that purges itself after
+seven days.
+
+**AssemblyAI** receives a signed URL to that small audio file, not the video. Their API
+accepts up to 5 GB and 10 hours per request and reports completion by webhook, so no
+process on our side waits while a long transcription runs; a two-hour job and a
+two-minute job hold connections open for exactly the same amount of time, which is none.
+
+**The Doc** at the end is roughly 100–150k characters for two hours of speech, written
+in batches of at most 100 requests. Comfortably one document.
+
+The remaining bottlenecks are the ones you'd expect and can't engineer away client-side:
+the user's disk (recording writes ~13 MB/min; the quota guard warns before starting if a
+2-hour projection doesn't fit, and local copies self-delete ~10 minutes after a verified
+upload) and the user's upstream bandwidth (upload time is bandwidth ÷ file size; the
+resumable protocol just makes interruptions free instead of fatal).
+
+## Reproducing
 
 ```sh
-# 1. Backend extraction benchmark (included in repo, excluded from normal CI)
+# extraction benchmark (excluded from normal CI)
 cd backend && RUN_LOAD_TESTS=1 uv run pytest tests/load -s
-# shorter variant: LOAD_TEST_DURATION_S=1800
+# shorter run: LOAD_TEST_DURATION_S=1800
 
-# 2. Generate a 2-hour synthetic video (~2.3 GB, encodes in minutes)
+# synthetic long recording (vp8 realtime: a 2h file encodes in minutes)
 ./scripts/gen_synthetic.sh 7200 video /tmp/two-hour.webm
 
-# 3. Feed it through the real product
-#    dashboard -> "Import file (debug)" -> pick /tmp/two-hour.webm
-#    watch: Uploading (with byte progress) -> ... -> Completed + email
-
-# 4. Resilience during step 3: toggle Wi-Fi off/on; kill the service worker.
-#    Success = exactly one file in Drive, pipeline completes anyway.
+# run it through the real product: dashboard -> Import file (debug)
+# then, mid-upload: toggle Wi-Fi off/on, kill the extension process.
+# success = exactly one Drive file and a completed pipeline anyway
 ```
