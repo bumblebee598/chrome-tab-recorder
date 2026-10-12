@@ -2,7 +2,7 @@
 
 [![Demo video](https://img.youtube.com/vi/Sgd8zJBh2UA/maxresdefault.jpg)](https://www.youtube.com/watch?v=Sgd8zJBh2UA)
 
-**▶ [Watch the demo](https://www.youtube.com/watch?v=Sgd8zJBh2UA)**
+**▶ [Watch the demo](https://www.youtube.com/watch?v=Sgd8zJBh2UA)** · 📄 [Technical overview (PDF)](Chrome_Tab_Recorder_Technical_Overview.pdf) · 🏗 [Architecture deep-dive](docs/ARCHITECTURE.md)
 
 Record a Chrome tab (plus your microphone on a separate stereo channel), upload it straight
 to your Google Drive with resumable uploads, transcribe it with AssemblyAI, and receive a
