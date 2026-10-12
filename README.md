@@ -1,5 +1,7 @@
 # Tab Recorder — Chrome tab → Drive → Transcript Doc → Email
 
+**▶ Demo video: https://www.youtube.com/watch?v=Sgd8zJBh2UA**
+
 Record a Chrome tab (plus your microphone on a separate stereo channel), upload it straight
 to your Google Drive with resumable uploads, transcribe it with AssemblyAI, and receive a
 formatted Google Doc transcript plus an email with both links — fully automatic, crash-safe
