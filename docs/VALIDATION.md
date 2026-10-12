@@ -1,10 +1,13 @@
 # Large-file validation
 
 The brief asks for recordings up to two hours at high resolution, which lands around
-2.5–3.5 GB of webm. The headline: a real two-hour podcast recording (tab video + tab
-audio + mic) went through the entire system on 2026-10-12 — the backend turned it into
-a delivered transcript Doc and email in 5 minutes 20 seconds. The rest of this file
-records the supporting measurements and walks through where a file that size lives at
+2.5–3.5 GB of webm, and allows a scaled substitute if a full run isn't practical. We
+didn't need the substitute: **the two-hour requirement is met with a real recording** — a
+two-hour podcast (tab video + tab audio + mic) recorded on 2026-10-12 went through the
+entire system, and the backend turned it into a delivered transcript Doc and email in
+5 minutes 20 seconds. The synthetic and scaled runs below are supporting stress evidence
+(interruption behaviour, extraction benchmarks), not the basis of the claim. The rest of
+this file records those measurements and walks through where a file that size lives at
 each point in the system and why no single step has to care how big it is.
 
 Test media comes from `scripts/gen_synthetic.sh`. The dashboard has an
