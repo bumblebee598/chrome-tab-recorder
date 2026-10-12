@@ -1,9 +1,11 @@
 # Large-file validation
 
 The brief asks for recordings up to two hours at high resolution, which lands around
-2.5–3.5 GB of webm. This file records what we actually measured, and then walks through
-where a file that size lives at each point in the system and why no single step has to
-care how big it is.
+2.5–3.5 GB of webm. The headline: a real two-hour podcast recording (tab video + tab
+audio + mic) went through the entire system on 2026-10-12 — the backend turned it into
+a delivered transcript Doc and email in 5 minutes 20 seconds. The rest of this file
+records the supporting measurements and walks through where a file that size lives at
+each point in the system and why no single step has to care how big it is.
 
 Test media comes from `scripts/gen_synthetic.sh`. The dashboard has an
 "Import file (debug)" action that slices any webm into 8 MiB OPFS segments and queues it
@@ -20,7 +22,7 @@ not a test harness.
 | Network drop mid-upload | same 1.2 GB upload, Wi-Fi off 60 s at 6% (67 MB) | status showed "Connection lost · attempt 1"; on reconnect it resumed from 6%, not from zero | 2026-10-12 |
 | Real 60-minute recording, 1080p | tab + mic, ~780 MB (≈13 MB/min) | full pipeline ran unattended: Drive, transcript, Doc, email | 2026-10-12 |
 | Service-worker kill mid-upload | OS-level kill of the extension process | attempted twice; the upload finished before the kill landed both times. The resume path this was meant to exercise is covered by the automated resumable-protocol tests (`driveUpload.test.ts`) | 2026-10-12 |
-| 2h two-speaker speech through transcription | 135 MB stereo speech file, distinct voice per channel | in progress | — |
+| **Real 2-hour recording, end to end** | 2h tab+mic recording of a podcast (video + both audio sources) | recorded, uploaded, and the backend ran registration → extraction → transcription → Doc → email in **5 min 20 s** (Firestore: registered 11:34:18Z, completed 11:39:38Z); transcript Doc and email delivered | 2026-10-12 |
 
 ¹ Opus VBR overshoots its 48k nominal on pure sine tones; real speech encodes close to
 nominal (~43 MB for 2h). Either number is small enough that it doesn't matter downstream.
