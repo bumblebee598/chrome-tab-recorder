@@ -57,6 +57,21 @@ make build-ext  # → extension/.output/chrome-mv3
 public key, so the extension ID — and therefore the OAuth redirect — is identical on every
 machine: `nfphhdblmoifbnbieoodhchadpcgnfjd`.
 
+### Reviewer checklist: verifying in Codespaces (~10 min)
+
+1. Repo page → **Code** → **Codespaces** → **Create codespace on main**. First boot
+   provisions the devcontainer and installs all dependencies; wait for the setup
+   terminal to finish (~5 min).
+2. `make test` → expect **80 passed, 1 skipped** (backend) and **87 passed** (extension).
+   (If `uv` isn't found: `export PATH="$HOME/.local/bin:$PATH"` and retry.)
+3. `make dev` → Firestore + Cloud Tasks emulators, api, and worker start (first run pulls
+   emulator images). In a second terminal: `curl localhost:8000/health` →
+   `{"status":"ok","service":"api"}`. Ctrl+C when done.
+4. `make build-ext` → produces `extension/.output/chrome-mv3`, loadable in a local Chrome.
+   To actually *use* the extension against the live backend, skip the build entirely and
+   load [`dist/chrome-mv3.zip`](dist/chrome-mv3.zip) per the quickstart above — your Google
+   account must be on the OAuth test-user list (testing-mode app; ask to be added).
+
 ## Environment configuration
 
 Two gitignored env files, with committed `*.example` templates. Copy each template, fill
