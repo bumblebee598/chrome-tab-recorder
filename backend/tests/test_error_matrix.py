@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.adapters.users import InMemoryUserStore
 from app.api.deps import (
+    get_audio_storage,
     get_docs_client,
     get_email_sender,
     get_job_store,
@@ -18,6 +19,7 @@ from app.settings import Settings
 from app.worker.main import app as worker_app
 from app.worker import task_routes
 from tests.fakes import (
+    FakeAudioStorage,
     FakeDocsClient,
     FakeEmailSender,
     FakeTaskQueue,
@@ -53,6 +55,7 @@ def ctx():
         get_settings: lambda: SETTINGS,
         get_job_store: lambda: store,
         get_task_queue: lambda: FakeTaskQueue(),
+        get_audio_storage: lambda: FakeAudioStorage(),
         get_docs_client: lambda: FakeDocsClient(),
         get_email_sender: lambda: FakeEmailSender(),
         get_transcription_client: lambda: FakeTranscriber(status="completed"),

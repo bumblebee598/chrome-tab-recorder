@@ -6,12 +6,14 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
+from app.adapters.users import InMemoryUserStore
 from app.api.deps import (
     get_audio_storage,
     get_job_store,
     get_settings,
     get_task_queue,
     get_transcription_client,
+    get_user_store,
 )
 from app.settings import Settings
 from app.worker.main import app
@@ -40,6 +42,7 @@ def ctx():
     app.dependency_overrides[get_task_queue] = lambda: queue
     app.dependency_overrides[get_audio_storage] = lambda: storage
     app.dependency_overrides[get_transcription_client] = lambda: transcriber
+    app.dependency_overrides[get_user_store] = lambda: InMemoryUserStore()
     yield TestClient(app), store, queue, storage, transcriber
     app.dependency_overrides.clear()
 
