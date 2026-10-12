@@ -11,7 +11,10 @@ import type { MessageResponse, WidgetStateMessage } from '@/lib/messages';
 const HOST_ID = '__tab_recorder_widget__';
 
 export default defineUnlistedScript(async () => {
-  if (document.getElementById(HOST_ID)) return;
+  // An extension reload orphans the previous script's runtime listeners but
+  // leaves its DOM behind; remove the zombie so this fresh injection can
+  // register working message handlers.
+  document.getElementById(HOST_ID)?.remove();
 
   const host = document.createElement('div');
   host.id = HOST_ID;
