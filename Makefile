@@ -1,4 +1,9 @@
-.PHONY: dev dev-down test test-backend test-extension build-ext zip-ext lint fixtures
+.PHONY: setup dev dev-down test test-backend test-extension build-ext zip-ext lint fixtures gen-secrets
+
+# One-time dependency install (Codespaces runs this automatically via postCreate)
+setup:
+	cd backend && uv sync
+	cd extension && npm install
 
 # Start emulators + api + worker (Firestore :8080, Cloud Tasks :8123, api :8000, worker :8081)
 dev:

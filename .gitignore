@@ -21,3 +21,6 @@ __pycache__/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Generated test media
+shared/fixtures/media/

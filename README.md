@@ -33,6 +33,8 @@ infra/setup.sh    one-command GCP bootstrap + deploy
 scripts/          synthetic test media, extension key generation
 docs/             ARCHITECTURE (system overview), ERRORS (failure matrix),
                   VALIDATION (2-hour evidence), TEST_REPORT, HOW_IT_WORKS, STATE_MACHINE
+dist/             prebuilt extension zip, targets the deployed backend
+TESTING.md        full QA matrix (automated + manual) with outcomes
 .devcontainer/    Codespaces: Python 3.12, Node 20, Java 21, gcloud, ffmpeg, docker-in-docker
 ```
 
@@ -56,10 +58,18 @@ Open in GitHub Codespaces (everything is preinstalled by the devcontainer) or lo
 Docker, Node 20+, [uv](https://docs.astral.sh/uv/), and ffmpeg. Then:
 
 ```sh
+make setup      # install dependencies (Codespaces does this automatically)
 make dev        # emulators + backend: Firestore :8080, Cloud Tasks :8123, api :8000, worker :8081
 make test       # backend pytest + extension vitest (both run the same state-machine fixtures)
 make build-ext  # → extension/.output/chrome-mv3
 ```
+
+Tests and emulators need **no secrets and no network access to Google or AssemblyAI** —
+everything runs on mocks and local emulators. What runs where: the backend, emulators, and
+all tests run inside Codespaces; the extension is *built* there but loaded into a local
+Chrome. A live end-to-end run (real transcription + email) uses the deployed Cloud Run
+backend — or your own deployment with real keys; locally the AssemblyAI webhook can't
+reach you, so the built-in polling backup carries completion instead.
 
 **Chrome extensions cannot run inside Codespaces.** Build there, download
 `extension/.output/chrome-mv3`, and load it unpacked on your machine. The manifest pins a
@@ -91,6 +101,13 @@ in the values, and you're done.
   home. Goes in `ASSEMBLYAI_API_KEY`.
 - **Google OAuth client ID + secret** — created in the GCP console (next section).
 - **The three random secrets** — `make gen-secrets` prints ready-to-paste values.
+- In Codespaces you can set these as **Codespaces secrets** (repo Settings → Secrets and
+  variables → Codespaces) instead of a `.env` file.
+
+The tables below are the values you provide by hand; `backend/.env.example` is the complete
+annotated list, and deploy-only variables (`API_BASE_URL`, `WORKER_BASE_URL`,
+`TASKS_INVOKER_SERVICE_ACCOUNT`, the `FAIL_STAGE` fault-injection flag) are set by
+`infra/setup.sh`, not by you.
 
 **`backend/.env`** — everything the API and worker need:
 
@@ -207,3 +224,14 @@ cd backend && RUN_LOAD_TESTS=1 uv run pytest tests/load -s   # 2h extraction ben
 Measured results and the reproduction procedure live in `docs/VALIDATION.md`; the
 error-handling matrix in `docs/ERRORS.md` (including the `FAIL_STAGE=extract:2` fault
 injection flag for forced-failure demos).
+
+## Known limitations
+
+- The OAuth app runs in Google's **testing mode**: only listed test users can sign in, and
+  refresh tokens expire after 7 days (re-consent is one click).
+- Chrome extensions cannot execute inside Codespaces — the extension is built there and
+  loaded into a local Chrome.
+- Stitched WebM recordings lack duration metadata in some players (seek-bar oddity);
+  playback and the backend pipeline are unaffected.
+- Removing the extension deletes recordings that haven't reached Drive yet; uploaded
+  recordings, Docs, and emails live in Google and are unaffected.

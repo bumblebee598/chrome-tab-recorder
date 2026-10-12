@@ -25,7 +25,7 @@ not a test harness.
 | Network drop mid-upload | same 1.2 GB upload, Wi-Fi off 60 s at 6% (67 MB) | status showed "Connection lost · attempt 1"; on reconnect it resumed from 6%, not from zero | 2026-10-12 |
 | Real 60-minute recording, 1080p | tab + mic, ~780 MB (≈13 MB/min) | full pipeline ran unattended: Drive, transcript, Doc, email | 2026-10-12 |
 | Service-worker kill mid-upload | OS-level kill of the extension process | attempted twice; the upload finished before the kill landed both times. The resume path this was meant to exercise is covered by the automated resumable-protocol tests (`driveUpload.test.ts`) | 2026-10-12 |
-| **Real 2-hour recording, end to end** | 2h tab+mic recording of a podcast (video + both audio sources) | recorded, uploaded, and the backend ran registration → extraction → transcription → Doc → email in **5 min 20 s** (Firestore: registered 11:34:18Z, completed 11:39:38Z); transcript Doc and email delivered | 2026-10-12 |
+| **Real 2-hour recording, end to end** | 2h tab+mic recording of a podcast (video + both audio sources; file size: TODO from Drive) | recorded, uploaded, and the backend ran registration → extraction → transcription → Doc → email in **5 min 20 s** (Firestore: registered 11:34:18Z, completed 11:39:38Z); transcript Doc and email delivered (Doc length / speaker-separation quality: TODO after review of the Doc) | 2026-10-12 |
 
 ¹ Opus VBR overshoots its 48k nominal on pure sine tones; real speech encodes close to
 nominal (~43 MB for 2h). Either number is small enough that it doesn't matter downstream.
