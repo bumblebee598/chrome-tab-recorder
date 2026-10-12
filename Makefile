@@ -2,6 +2,7 @@
 
 # Start emulators + api + worker (Firestore :8080, Cloud Tasks :8123, api :8000, worker :8081)
 dev:
+	@test -f backend/.env || cp backend/.env.example backend/.env
 	docker compose up --build
 
 dev-down:
